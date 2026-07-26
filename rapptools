@@ -30,7 +30,10 @@ import zipfile
 
 HOME = os.path.expanduser("~")
 ROOT = os.environ.get("RAPPTOOLS_HOME", os.path.join(HOME, ".rappfleet"))
-HERE = os.path.dirname(os.path.abspath(__file__))
+# realpath, not abspath — install.sh symlinks this into ~/.local/bin, and abspath
+# left CATALOG pointing at ~/.local/bin/catalog/catalog.json. Same defect that
+# made shot report a false all-clear; fixed in two tools and missed here.
+HERE = os.path.dirname(os.path.realpath(__file__))
 CATALOG = os.environ.get("RAPPTOOLS_CATALOG", os.path.join(HERE, "catalog", "catalog.json"))
 BRAINSTEM = os.environ.get("BRAINSTEM_SRC", os.path.join(HOME, ".brainstem", "src", "rapp_brainstem"))
 # The estate's cubby contract, as defined by rapp_pipeline_agent.py's tree
