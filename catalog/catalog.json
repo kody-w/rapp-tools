@@ -38,8 +38,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "7fdb13d53d9b20b96800f4a2c892e12dbc352a7ea3558411adaac5c1d91d28ff",
-      "egg_bytes": 5607
+      "egg_sha256": "6d1da064d69e08dff0b2c9067de0a04ac3ec7091e934de8f951bb19609beb50f",
+      "egg_bytes": 5607,
+      "version": "1.0.0"
     },
     {
       "id": "rapp_crispy",
@@ -78,8 +79,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "dfe1391a19cbba59002df46500ba7b3e763fb7fe6c0b9817abbc184331315795",
-      "egg_bytes": 12090
+      "egg_sha256": "5e80b36046cd451f08ec7daa315f423c2f9b11d726a7f3598a49daeb48eb92b3",
+      "egg_bytes": 12090,
+      "version": "1.2.1"
     },
     {
       "id": "rapp_rewind",
@@ -116,8 +118,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "76c7b28dda43040c505c78b2c0f4c30906fc4e89afcf634837c74f0e80871d1e",
-      "egg_bytes": 3826
+      "egg_sha256": "b11e27a9f5f2c1ac71c2ccfa7bd29cc6ae7272c9b2f225d59d420b13e1833d1c",
+      "egg_bytes": 3826,
+      "version": "1.0.0"
     },
     {
       "id": "rapp_shot",
@@ -152,8 +155,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "c83ab670053ef9560f2fcd28b3f9b929434af94b0522e0c77b1ec4553b97517a",
-      "egg_bytes": 4160
+      "egg_sha256": "a412eac516d4e54a06e6b880a2c9bacdc75a28fd6c131ade537495238494f4d3",
+      "egg_bytes": 4160,
+      "version": "1.0.0"
     }
   ]
 }

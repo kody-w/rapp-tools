@@ -18,6 +18,7 @@ so the tool's repo stays the source of truth. The only thing centralised is
 """
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -164,6 +165,55 @@ def cmd_list(a):
     return 0
 
 
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def verify_egg(t, egg, source_desc):
+    """An egg is unpacked and its agents are then executed by the brainstem. If
+    the catalog publishes a digest, the bytes must match it before we extract —
+    otherwise `hatch` is a remote-code-execution path with no integrity check at
+    all. A catalog with no digest is reported, not silently trusted."""
+    want = (t.get("egg_sha256") or "").strip().lower()
+    got = sha256_of(egg)
+    if not want:
+        print(f"  sha256   {got[:16]}… (catalog publishes no digest — unverified)")
+        return True
+    if want != got:
+        print(f"egg digest mismatch for {t['id']} — refusing to extract\n"
+              f"  source   {source_desc}\n"
+              f"  expected {want}\n"
+              f"  actual   {got}", file=sys.stderr)
+        return False
+    print(f"  sha256   {got[:16]}… verified against the catalog")
+    return True
+
+
+def restore_launchd(label):
+    """Bring a parked launchd agent back. Idempotent and never fatal: this runs
+    from a `finally`, so it must not mask the error that sent us there."""
+    if not label:
+        return
+    plist = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+    if not os.path.exists(plist):
+        print(f"  WARNING: cannot restore {label} — {plist} is gone",
+              file=sys.stderr)
+        return
+    p = subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", plist],
+                       capture_output=True, text=True)
+    # 37 (already booted) / 5 (input in use) mean it is loaded; that is success.
+    if p.returncode in (0, 5, 37):
+        print(f"  restored launchd agent {label}")
+        return
+    print(f"  WARNING: `launchctl bootstrap {label}` exited {p.returncode} — the "
+          f"agent is NOT loaded. Re-enable it with:\n"
+          f"    launchctl bootstrap gui/{os.getuid()} {plist}", file=sys.stderr)
+
+
 def cmd_hatch(a):
     t = tool(a.id)
     if not t:
@@ -181,6 +231,16 @@ def cmd_hatch(a):
         subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
                        capture_output=True)
         time.sleep(2)
+    # Everything below can fail. The agent is parked; leaving it parked would
+    # silently disable a service the user depends on, so restoration is a
+    # `finally`, not a line on the success path.
+    try:
+        return _hatch_locked(a, t, label)
+    finally:
+        restore_launchd(label)
+
+
+def _hatch_locked(a, t, label):
     for _ in range(3):
         pids = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
                               capture_output=True, text=True).stdout.split()
@@ -224,6 +284,9 @@ def cmd_hatch(a):
         print(f"could not obtain an egg for {t['id']}", file=sys.stderr)
         return 1
 
+    if not verify_egg(t, egg, why):
+        return 1
+
     root = hatched
     shutil.rmtree(root, ignore_errors=True)
     os.makedirs(root, exist_ok=True)
@@ -248,12 +311,6 @@ def cmd_hatch(a):
         time.sleep(0.5)
         ok, _why = hatched_ok(t, timeout=3)
         if ok:
-            if label:
-                subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}",
-                                os.path.expanduser(
-                                    f"~/Library/LaunchAgents/{label}.plist")],
-                               capture_output=True)
-                print(f"  restored launchd agent {label}")
             print(f"{t['id']} hatched on :{t['port']}")
             print(f"  egg      {why}")
             print(f"  cubby    {root}")
