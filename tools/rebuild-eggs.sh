@@ -35,8 +35,18 @@ for pair in $TOOLS; do
 
   # The singleton agent is the source of truth; the twin copy is generated.
   # They drifted before, which is how an egg shipped a claim its repo had
-  # already corrected.
-  cp "$root/$pkg/singleton/${pkg}_agent.py" "$root/$pkg/twin/agents/${pkg}_agent.py"
+  # already corrected. --check must REPORT that drift, not silently repair it:
+  # copying here made the read-only check write to the working tree and made
+  # twin-only edits invisible, which is the one thing it exists to catch.
+  if [ "$CHECK" = 1 ]; then
+    if ! cmp -s "$root/$pkg/singleton/${pkg}_agent.py" \
+                "$root/$pkg/twin/agents/${pkg}_agent.py"; then
+      REPORT+=("DRIFT       $pkg — twin agent differs from the singleton"); rc=1
+      continue
+    fi
+  else
+    cp "$root/$pkg/singleton/${pkg}_agent.py" "$root/$pkg/twin/agents/${pkg}_agent.py"
+  fi
 
   build=$(mktemp -d)
   mkdir -p "$build/state"
@@ -65,24 +75,34 @@ PY
     want=$(python3 -c "
 import json;c=json.load(open('$CATALOG'))
 print(next((t.get('egg_sha256') or 'none') for t in c['tools'] if t['id']=='$pkg'))")
+    wantb=$(python3 -c "
+import json;c=json.load(open('$CATALOG'))
+print(next((t.get('egg_bytes') or 0) for t in c['tools'] if t['id']=='$pkg'))")
+    haveb=$(wc -c < "$egg" | tr -d ' ')
     if [ "$new" != "$have" ]; then
       REPORT+=("STALE-EGG   $pkg — on disk does not match source"); rc=1
     elif [ "$new" != "$want" ]; then
       REPORT+=("STALE-SHA   $pkg — catalogue digest does not match the egg"); rc=1
+    elif [ "$wantb" != "$haveb" ]; then
+      REPORT+=("STALE-BYTES $pkg — catalogue says $wantb bytes, egg is $haveb"); rc=1
     else
       REPORT+=("ok          $pkg $ver ${new:0:16}…")
     fi
   else
     python3 "$PACK" "$build" "$egg" | sed "s|^|  $pkg  |"
     sha=$(shasum -a 256 "$egg" | cut -d' ' -f1)
-    python3 - "$CATALOG" "$pkg" "$sha" "$ver" <<'PY'
+    bytes_=$(wc -c < "$egg" | tr -d ' ')
+    python3 - "$CATALOG" "$pkg" "$sha" "$ver" "$bytes_" <<'PY'
 import json, sys
-path, pkg, sha, ver = sys.argv[1:5]
+path, pkg, sha, ver, nbytes = sys.argv[1:6]
 c = json.load(open(path))
 for t in c["tools"]:
     if t["id"] == pkg:
         t["egg_sha256"] = sha
         t["version"] = ver
+        # published alongside the digest and never updated: every value was
+        # wrong. A stale integrity-adjacent field is worse than no field.
+        t["egg_bytes"] = int(nbytes)
 json.dump(c, open(path, "w"), indent=2)
 open(path, "a").write("\n")
 PY

@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -214,47 +215,17 @@ def restore_launchd(label):
           f"    launchctl bootstrap gui/{os.getuid()} {plist}", file=sys.stderr)
 
 
-def cmd_hatch(a):
-    t = tool(a.id)
-    if not t:
-        print(f"no such tool: {a.id}", file=sys.stderr)
-        return 1
-    ready, why = hatched_ok(t)
-    if ready and not a.force:
-        print(f"{t['id']} already hatched and serving {t['agent']} on :{t['port']}")
-        return 0
-    if http_ok(t["port"]) and not ready:
-        print(f"  :{t['port']} is occupied but {why} — replacing it")
-    label = launchd_label(t)
-    if label:
-        print(f"  parking launchd agent {label} so it cannot respawn mid-hatch")
-        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
-                       capture_output=True)
-        time.sleep(2)
-    # Everything below can fail. The agent is parked; leaving it parked would
-    # silently disable a service the user depends on, so restoration is a
-    # `finally`, not a line on the success path.
-    try:
-        return _hatch_locked(a, t, label)
-    finally:
-        restore_launchd(label)
+def resolve_egg(a, t):
+    """Find the egg and prove its digest. PURE: no process is killed, no launchd
+    agent is parked and nothing is extracted until this has succeeded.
 
-
-def _hatch_locked(a, t, label):
-    for _ in range(3):
-        pids = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
-                              capture_output=True, text=True).stdout.split()
-        if not pids:
-            break
-        for pid in pids:
-            subprocess.run(["kill", pid], capture_output=True)
-        time.sleep(1.5)
-    if not os.path.isdir(BRAINSTEM):
-        print(f"no brainstem at {BRAINSTEM} — set BRAINSTEM_SRC", file=sys.stderr)
-        return 1
-
+    It used to run after the port had already been cleared, so `hatch` on a
+    tampered egg printed "refusing to extract" — which reads as a safe no-op —
+    having already killed the healthy twin that was serving. A safety check that
+    causes the outage it is protecting against is worse than no check.
+    """
     hatched, cache, remote = cubby_paths(t)
-    log, egg = [], None
+    log, egg, why = [], None, None
     source = getattr(a, "source", "auto")
 
     # Resolution order mirrors the estate's own: cached cubby egg -> batcave ->
@@ -282,12 +253,106 @@ def _hatch_locked(a, t, label):
         for line in log:
             print(f"  {line}", file=sys.stderr)
         print(f"could not obtain an egg for {t['id']}", file=sys.stderr)
-        return 1
-
+        return None, None, log
     if not verify_egg(t, egg, why):
+        return None, None, log
+    return egg, why, log
+
+
+def cmd_hatch(a):
+    t = tool(a.id)
+    if not t:
+        print(f"no such tool: {a.id}", file=sys.stderr)
+        return 1
+    ready, why_ready = hatched_ok(t)
+    if ready and not a.force:
+        print(f"{t['id']} already hatched and serving {t['agent']} on :{t['port']}")
+        return 0
+
+    # 1. Obtain and VERIFY the egg before touching anything that is running.
+    egg, why, log = resolve_egg(a, t)
+    if egg is None:
         return 1
 
-    root = hatched
+    if http_ok(t["port"]) and not ready:
+        print(f"  :{t['port']} is occupied but {why_ready} — replacing it")
+
+    # 2. Park the launchd owner, if any, so KeepAlive cannot respawn mid-hatch.
+    label = launchd_label(t)
+    took_the_port = False
+
+    # Arm the signal handlers BEFORE parking, not after. Installing them after
+    # the bootout (and its 2s settle) left a window in which a SIGTERM killed
+    # the process outright — rc 143, no `finally`, agent permanently booted out.
+    # That window was exactly where a `timeout` or an impatient ^C lands.
+    prev = {}
+    if label:
+        def _bail(signum, _frame):
+            raise KeyboardInterrupt(f"signal {signum}")
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            try:
+                prev[sig] = signal.signal(sig, _bail)
+            except (ValueError, OSError):
+                pass
+    try:
+        if label:
+            print(f"  parking launchd agent {label} so it cannot respawn mid-hatch")
+            subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
+                           capture_output=True)
+            time.sleep(2)
+        rc = _hatch_locked(a, t, egg, why, log)
+        took_the_port = (rc == 0)
+        return rc
+    except KeyboardInterrupt as exc:
+        print(f"\ninterrupted ({exc}) — rolling back", file=sys.stderr)
+        return 130
+    finally:
+        for sig, handler in prev.items():
+            try:
+                signal.signal(sig, handler)
+            except (ValueError, OSError):
+                pass
+        if label and took_the_port:
+            # DO NOT restore. The freshly hatched twin now owns the port, so
+            # bootstrapping a KeepAlive agent that binds the same port puts it
+            # into a silent permanent crash loop ("Address already in use"),
+            # printed to the user as "restored launchd agent" — good news for a
+            # service that is now failing every few seconds.
+            print(f"  launchd agent {label} left parked — the hatched twin owns "
+                  f":{t['port']} now.")
+            print(f"    hand the port back with:  rapptools stop {t['id']} && "
+                  f"launchctl bootstrap gui/{os.getuid()} "
+                  f"~/Library/LaunchAgents/{label}.plist")
+        else:
+            restore_launchd(label)
+
+
+def _hatch_locked(a, t, egg, why, log):
+    for _ in range(3):
+        pids = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
+                              capture_output=True, text=True).stdout.split()
+        if not pids:
+            break
+        for pid in pids:
+            subprocess.run(["kill", pid], capture_output=True)
+        time.sleep(1.5)
+    if not os.path.isdir(BRAINSTEM):
+        print(f"no brainstem at {BRAINSTEM} — set BRAINSTEM_SRC", file=sys.stderr)
+        return 1
+
+    root, _cache, _remote = cubby_paths(t)
+
+    # A twin accumulates memory in .brainstem_data. `--force` is the documented
+    # way to re-hatch, and it used to rmtree that without a word. Carry it over.
+    state = os.path.join(root, ".brainstem_data")
+    carried = None
+    if os.path.isdir(state) and os.listdir(state):
+        carried = os.path.join(ROOT, f".carry-{t['id']}")
+        shutil.rmtree(carried, ignore_errors=True)
+        os.makedirs(os.path.dirname(carried), exist_ok=True)
+        shutil.copytree(state, carried)
+        print(f"  preserving {len(os.listdir(state))} item(s) of twin state")
+
     shutil.rmtree(root, ignore_errors=True)
     os.makedirs(root, exist_ok=True)
     with zipfile.ZipFile(egg) as z:
@@ -298,7 +363,14 @@ def _hatch_locked(a, t, label):
     base = os.path.join(BRAINSTEM, "agents", "basic_agent.py")
     if os.path.exists(base):
         shutil.copy(base, os.path.join(root, "agents"))
-    os.makedirs(os.path.join(root, ".brainstem_data"), exist_ok=True)
+    os.makedirs(state, exist_ok=True)
+    if carried:
+        for name in os.listdir(carried):
+            src = os.path.join(carried, name)
+            dst = os.path.join(state, name)
+            (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, dst)
+        shutil.rmtree(carried, ignore_errors=True)
+        print("  twin state restored into the new cubby")
 
     env = dict(os.environ, PORT=str(t["port"]),
                SOUL_PATH=os.path.join(root, "soul.md"),
