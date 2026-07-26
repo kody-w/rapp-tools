@@ -49,7 +49,7 @@
       "port": 7090,
       "agent": "RappCrispy",
       "genre": "tools",
-      "one": "Record, denoise, transcribe and summarise meetings entirely on-device.",
+      "one": "Record, denoise and transcribe meetings entirely on-device; summarise through a hook you choose (the default one calls `claude -p`).",
       "engines": [
         "DeepFilterNet3 / RNNoise",
         "whisper.cpp (localhost)"
@@ -155,9 +155,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "b08f8d55b79124b1a8bcd106e938e8b22b09110186fff5ff564f0b7eaba6f33f",
-      "egg_bytes": 5176,
-      "version": "1.1.0"
+      "egg_sha256": "bf6b91e5559ea6c619c0d487f6cdc8b15ab4386ed0569068e3590f3af59b9306",
+      "egg_bytes": 5180,
+      "version": "1.2.0"
     }
   ]
 }

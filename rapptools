@@ -316,15 +316,20 @@ def cmd_hatch(a):
     # the process outright — rc 143, no `finally`, agent permanently booted out.
     # That window was exactly where a `timeout` or an impatient ^C lands.
     spawned = []
+    # Arm for EVERY tool, not just launchd-owned ones. This used to sit inside
+    # `if label:`, so for the three tools with no launchd agent a SIGTERM killed
+    # the process outright: the old twin already dead, the cubby half-extracted,
+    # and not one word printed. `timeout` and a `kill` in a wrapper both do this.
     prev = {}
-    if label:
-        def _bail(signum, _frame):
-            raise KeyboardInterrupt(f"signal {signum}")
-        for sig in (signal.SIGTERM, signal.SIGHUP):
-            try:
-                prev[sig] = signal.signal(sig, _bail)
-            except (ValueError, OSError):
-                pass
+
+    def _bail(signum, _frame):
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            prev[sig] = signal.signal(sig, _bail)
+        except (ValueError, OSError):
+            pass
     rc, interrupted = 1, False
     try:
         if label:
@@ -338,6 +343,12 @@ def cmd_hatch(a):
         interrupted = True
         rc = 130
         print(f"\ninterrupted ({exc}) — rolling back", file=sys.stderr)
+        # Be explicit: the port was cleared before the interrupt arrived, so the
+        # previous twin is gone and nothing is serving. Silence here reads as
+        # "nothing happened", which is the opposite of the truth.
+        print(f"  {t['id']} is NOT serving on :{t['port']} — the old twin was "
+              f"stopped before the interrupt. Bring it back with:\n"
+              f"    rapptools hatch {t['id']} --force", file=sys.stderr)
         return rc
     finally:
         for sig, handler in prev.items():
@@ -418,7 +429,12 @@ def _hatch_locked(a, t, egg, why, log, spawned):
         shutil.rmtree(carried, ignore_errors=True)
         os.makedirs(os.path.dirname(carried), exist_ok=True)
         shutil.copytree(state, carried)
-        print(f"  preserving {len(os.listdir(state))} item(s) of twin state")
+        # NOTE: today's brainstem hardcodes its data dir next to itself rather
+        # than under the cubby, so this only ever carries files someone put here
+        # by hand. Kept because --force is documented as the way to re-hatch and
+        # silently rmtree-ing a state directory is not something to leave armed.
+        print(f"  preserving {len(os.listdir(state))} item(s) of twin state "
+              f"(anything placed under the cubby by hand)")
 
     shutil.rmtree(root, ignore_errors=True)
     os.makedirs(root, exist_ok=True)
