@@ -68,7 +68,25 @@ else
   info "SKIP: nothing hatched — run rapptools hatch-all"
 fi
 
-head_ "5. The catalogue vendors nothing"
+head_ "5. The cubby contract matches the estate's, not an invented one"
+# rapp_pipeline_agent.py defines the convention: rapplications/<slug>/cubby-<slug>.egg
+# in the batcave, cached at ~/.brainstem/eggs/cubby-<slug>.egg, hatched to
+# ~/.brainstem/cubbies/<slug>/hatched. Asserting it stops a future refactor from
+# quietly inventing a second layout.
+for tok in 'rapplications/{s}/cubby-{s}.egg' '.brainstem", "cubbies"' '.brainstem", "eggs"'; do
+  grep -qF "$tok" "$RT" && ok "uses the estate path: $tok" || bad "missing estate path: $tok"
+done
+BC=$(gh api repos/kody-w/rapp-batcave/contents/rapplications --jq '.[].name' 2>/dev/null | tr '\n' ' ')
+for s in rapp-voice rapp-crispy rapp-rewind rapp-shot; do
+  case " $BC " in *" $s "*) ok "cubbied in the batcave: $s" ;; *) bad "not cubbied: $s" ;; esac
+done
+for s in rapp-shot; do
+  f=$(gh api "repos/kody-w/rapp-batcave/contents/rapplications/$s" --jq '[.[].name]|join(",")' 2>/dev/null)
+  case "$f" in *"cubby-$s.egg"*) ok "$s carries cubby-$s.egg" ;; *) bad "$s egg misnamed: $f" ;; esac
+  case "$f" in *cubby.json*) ok "$s carries cubby.json" ;; *) bad "$s has no cubby.json" ;; esac
+done
+
+head_ "6. The catalogue vendors nothing"
 vend=$(find "$HERE/.." -name '*.egg' -o -name '*_agent.py' 2>/dev/null | grep -v node_modules | wc -l | tr -d ' ')
 [ "$vend" = "0" ] && ok "no eggs or agents copied into this repo" \
   || bad "$vend vendored artifact(s) — entries must point at source repos"

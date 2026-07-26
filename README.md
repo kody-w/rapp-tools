@@ -62,6 +62,32 @@ curl -s localhost:7093/chat -H 'Content-Type: application/json' \
 Unknown actions are rejected **before** dispatch against the catalogue's declared
 action list, so a typo fails locally rather than becoming an odd conversation.
 
+## Cubbying and hatching from the private batcave
+
+These follow the estate's existing cubby contract — the one
+`rapp_pipeline_agent.py` already resolves against — rather than a new layout:
+
+```
+batcave   rapplications/<slug>/cubby-<slug>.egg   +  cubby.json (rapp-cubby/1.0)
+cache     ~/.brainstem/eggs/cubby-<slug>.egg
+hatched   ~/.brainstem/cubbies/<slug>/hatched
+```
+
+`rapptools hatch` resolves in that order — cached cubby egg, then the private
+batcave over `gh`, then the public repo, then a local checkout — and tells you
+which one it used:
+
+```bash
+rapptools hatch rapp_shot --source batcave
+  rapp_shot hatched on :7093
+    egg      kody-w/rapp-batcave:rapplications/rapp-shot/cubby-rapp-shot.egg
+    cubby    ~/.brainstem/cubbies/rapp-shot/hatched
+```
+
+Verified end to end: with every hatched tree and cached egg deleted,
+`rapptools hatch-all --source batcave` brings the whole fleet back from the
+private batcave alone and each one answers real work.
+
 ## How hatching works
 
 Per `rapp-application/1.0` §13: the egg is unzipped into an isolated twin root

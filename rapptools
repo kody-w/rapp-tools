@@ -33,6 +33,47 @@ ROOT = os.environ.get("RAPPTOOLS_HOME", os.path.join(HOME, ".rappfleet"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATALOG = os.environ.get("RAPPTOOLS_CATALOG", os.path.join(HERE, "catalog", "catalog.json"))
 BRAINSTEM = os.environ.get("BRAINSTEM_SRC", os.path.join(HOME, ".brainstem", "src", "rapp_brainstem"))
+# The estate's cubby contract, as defined by rapp_pipeline_agent.py's tree
+# resolution — this is an existing convention, not one invented here:
+#   batcave   rapplications/<slug>/cubby-<slug>.egg
+#   cache     ~/.brainstem/eggs/cubby-<slug>.egg
+#   hatched   ~/.brainstem/cubbies/<slug>/hatched
+BATCAVE = os.environ.get("RAPP_BATCAVE", "kody-w/rapp-batcave")
+CUBBY_ROOT = os.path.join(HOME, ".brainstem", "cubbies")
+EGG_CACHE = os.path.join(HOME, ".brainstem", "eggs")
+
+
+def slug_of(t):
+    return t["id"].replace("_", "-")
+
+
+def cubby_paths(t):
+    s = slug_of(t)
+    return (os.path.join(CUBBY_ROOT, s, "hatched"),
+            os.path.join(EGG_CACHE, f"cubby-{s}.egg"),
+            f"rapplications/{s}/cubby-{s}.egg")
+
+
+def pull_cubby(t, log):
+    """Pull the egg out of the private batcave with gh. Mirrors the resolution
+    order the estate already uses, so a cubbied rapplication travels alone."""
+    _, cache, remote = cubby_paths(t)
+    os.makedirs(EGG_CACHE, exist_ok=True)
+    p = subprocess.run(["gh", "api", f"repos/{BATCAVE}/contents/{remote}",
+                        "--jq", ".content"], capture_output=True, text=True)
+    if p.returncode != 0 or not (p.stdout or "").strip():
+        log.append(f"batcave pull failed: {(p.stderr or '').strip()[:160]}")
+        return None
+    import base64
+    try:
+        blob = base64.b64decode("".join((p.stdout or "").split()))
+    except Exception as exc:
+        log.append(f"batcave payload undecodable: {exc}")
+        return None
+    with open(cache, "wb") as fh:
+        fh.write(blob)
+    log.append(f"pulled {remote} from {BATCAVE} ({len(blob)} bytes)")
+    return cache
 VENV = os.environ.get("BRAINSTEM_PYTHON", os.path.join(HOME, ".brainstem", "venv", "bin", "python"))
 
 
@@ -100,26 +141,39 @@ def cmd_hatch(a):
     if not os.path.isdir(BRAINSTEM):
         print(f"no brainstem at {BRAINSTEM} — set BRAINSTEM_SRC", file=sys.stderr)
         return 1
-    root = os.path.join(ROOT, t["id"])
-    egg = os.path.join(ROOT, f"{t['id']}.egg")
-    os.makedirs(ROOT, exist_ok=True)
 
-    local = os.path.join(HOME, "Documents", "Fable5", t["repo"], t["id"], "eggs", f"{t['id']}.egg")
-    if a.local and os.path.exists(local):
-        shutil.copy(local, egg)
-        src = f"local checkout ({local})"
-    else:
+    hatched, cache, remote = cubby_paths(t)
+    log, egg = [], None
+    source = getattr(a, "source", "auto")
+
+    # Resolution order mirrors the estate's own: cached cubby egg -> batcave ->
+    # the public repo -> a local checkout. Each step says what it did.
+    if source in ("auto", "cubby") and os.path.isfile(cache):
+        egg, why = cache, f"cached cubby egg ({cache})"
+    if egg is None and source in ("auto", "cubby", "batcave"):
+        got = pull_cubby(t, log)
+        if got:
+            egg, why = got, f"{BATCAVE}:{remote}"
+    if egg is None and source in ("auto", "repo"):
         try:
-            fetch(t["egg_url"], egg)
-            src = t["egg_url"]
+            os.makedirs(EGG_CACHE, exist_ok=True)
+            fetch(t["egg_url"], cache)
+            egg, why = cache, t["egg_url"]
         except Exception as exc:
-            if os.path.exists(local):
-                shutil.copy(local, egg)
-                src = f"local checkout, after fetch failed ({exc})"
-            else:
-                print(f"could not fetch the egg: {exc}", file=sys.stderr)
-                return 1
+            log.append(f"repo fetch failed: {exc}")
+    if egg is None:
+        local = os.path.join(HOME, "Documents", "Fable5", t["repo"], t["id"],
+                             "eggs", f"{t['id']}.egg")
+        if os.path.exists(local):
+            shutil.copy(local, cache)
+            egg, why = cache, f"local checkout ({local})"
+    if egg is None:
+        for line in log:
+            print(f"  {line}", file=sys.stderr)
+        print(f"could not obtain an egg for {t['id']}", file=sys.stderr)
+        return 1
 
+    root = hatched
     shutil.rmtree(root, ignore_errors=True)
     os.makedirs(root, exist_ok=True)
     with zipfile.ZipFile(egg) as z:
@@ -135,16 +189,22 @@ def cmd_hatch(a):
     env = dict(os.environ, PORT=str(t["port"]),
                SOUL_PATH=os.path.join(root, "soul.md"),
                AGENTS_PATH=os.path.join(root, "agents"))
-    log = open(os.path.join(ROOT, f"{t['id']}.log"), "a")
+    os.makedirs(ROOT, exist_ok=True)
+    logf = open(os.path.join(ROOT, f"{t['id']}.log"), "a")
     subprocess.Popen([VENV, "brainstem.py"], cwd=BRAINSTEM, env=env,
-                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                     stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
     for _ in range(40):
         time.sleep(0.5)
         if http_ok(t["port"]):
-            print(f"{t['id']} hatched on :{t['port']}  (from {src})")
-            print(f"  drive it:  rapptools call {t['id']} doctor")
+            print(f"{t['id']} hatched on :{t['port']}")
+            print(f"  egg      {why}")
+            print(f"  cubby    {root}")
+            print(f"  drive it rapptools call {t['id']} doctor")
             return 0
-    print(f"{t['id']} did not answer on :{t['port']} — see {ROOT}/{t['id']}.log", file=sys.stderr)
+    for line in log:
+        print(f"  {line}", file=sys.stderr)
+    print(f"{t['id']} did not answer on :{t['port']} — see {ROOT}/{t['id']}.log",
+          file=sys.stderr)
     return 1
 
 
@@ -236,7 +296,7 @@ def cmd_stop(a):
 def cmd_hatch_all(a):
     rc = 0
     for t in catalog()["tools"]:
-        ns = argparse.Namespace(id=t["id"], force=False, local=a.local)
+        ns = argparse.Namespace(id=t["id"], force=a.force, source=a.source)
         rc |= cmd_hatch(ns)
     print()
     return cmd_status(a)
@@ -253,11 +313,15 @@ def main():
     s = sub.add_parser("hatch", help="boot a tool into its own brainstem")
     s.add_argument("id")
     s.add_argument("--force", action="store_true")
-    s.add_argument("--local", action="store_true", help="prefer a local checkout's egg")
+    s.add_argument("--source", choices=["auto", "cubby", "batcave", "repo"],
+                   default="auto",
+                   help="where the egg comes from; auto tries cached cubby, then "
+                        "the batcave, then the public repo, then a local checkout")
     s.set_defaults(fn=cmd_hatch)
 
     s = sub.add_parser("hatch-all", help="boot every tool in the catalogue")
-    s.add_argument("--local", action="store_true")
+    s.add_argument("--force", action="store_true")
+    s.add_argument("--source", choices=["auto", "cubby", "batcave", "repo"], default="auto")
     s.add_argument("--verbose", action="store_true")
     s.set_defaults(fn=cmd_hatch_all)
 
