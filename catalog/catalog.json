@@ -79,9 +79,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "dc9a3cb9972efd2aa738d48ce787b44fd48db16243fc47dd736cad25784c414e",
-      "egg_bytes": 13246,
-      "version": "1.3.0"
+      "egg_sha256": "f01295ae5c64ced135fbe33993b23b3d191045ecb46d66ea6fa0c6671ea55737",
+      "egg_bytes": 13695,
+      "version": "1.4.0"
     },
     {
       "id": "rapp_rewind",
@@ -155,9 +155,9 @@
       "runtime": "twin",
       "publisher": "@kody-w",
       "license": "MIT",
-      "egg_sha256": "d05e011b3172d7e931ac6b497296556709f5c3cf19c8639106e0a538d433e9be",
-      "egg_bytes": 5179,
-      "version": "1.0.1"
+      "egg_sha256": "b08f8d55b79124b1a8bcd106e938e8b22b09110186fff5ff564f0b7eaba6f33f",
+      "egg_bytes": 5176,
+      "version": "1.1.0"
     }
   ]
 }

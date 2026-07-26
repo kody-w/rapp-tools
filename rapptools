@@ -225,38 +225,68 @@ def resolve_egg(a, t):
     causes the outage it is protecting against is worse than no check.
     """
     hatched, cache, remote = cubby_paths(t)
-    log, egg, why = [], None, None
+    log = []
     source = getattr(a, "source", "auto")
 
     # Resolution order mirrors the estate's own: cached cubby egg -> batcave ->
-    # the public repo -> a local checkout. Each step says what it did.
-    if source in ("auto", "cubby") and os.path.isfile(cache):
-        egg, why = cache, f"cached cubby egg ({cache})"
-    if egg is None and source in ("auto", "cubby", "batcave"):
-        got = pull_cubby(t, log)
-        if got:
-            egg, why = got, f"{BATCAVE}:{remote}"
-    if egg is None and source in ("auto", "repo"):
+    # the public repo -> a local checkout. Each CANDIDATE is verified, and a
+    # failure falls through to the next rather than aborting.
+    #
+    # It used to verify once, against whichever source produced a file first.
+    # A version bump then left every local cache stale and `hatch` dead for
+    # three of four tools with an error naming no remedy — while a good egg sat
+    # one source down the list.
+    def _cached():
+        return cache if os.path.isfile(cache) else None
+
+    def _batcave():
+        return pull_cubby(t, log)
+
+    def _repo():
         try:
             os.makedirs(EGG_CACHE, exist_ok=True)
             fetch(t["egg_url"], cache)
-            egg, why = cache, t["egg_url"]
+            return cache
         except Exception as exc:
             log.append(f"repo fetch failed: {exc}")
-    if egg is None:
-        local = os.path.join(HOME, "Documents", "Fable5", t["repo"], t["id"],
-                             "eggs", f"{t['id']}.egg")
-        if os.path.exists(local):
-            shutil.copy(local, cache)
-            egg, why = cache, f"local checkout ({local})"
-    if egg is None:
-        for line in log:
-            print(f"  {line}", file=sys.stderr)
-        print(f"could not obtain an egg for {t['id']}", file=sys.stderr)
-        return None, None, log
-    if not verify_egg(t, egg, why):
-        return None, None, log
-    return egg, why, log
+            return None
+
+    def _local():
+        p = os.path.join(HOME, "Documents", "Fable5", t["repo"], t["id"],
+                         "eggs", f"{t['id']}.egg")
+        if not os.path.exists(p):
+            return None
+        shutil.copy(p, cache)
+        return cache
+
+    candidates = []
+    if source in ("auto", "cubby"):
+        candidates.append((_cached, f"cached cubby egg ({cache})"))
+    if source in ("auto", "cubby", "batcave"):
+        candidates.append((_batcave, f"{BATCAVE}:{remote}"))
+    if source in ("auto", "repo"):
+        candidates.append((_repo, t["egg_url"]))
+    if source == "auto":
+        candidates.append((_local, "local checkout"))
+
+    for get, desc in candidates:
+        egg = get()
+        if not egg:
+            continue
+        if verify_egg(t, egg, desc):
+            return egg, desc, log
+        log.append(f"digest mismatch from {desc} — trying the next source")
+        if egg == cache and os.path.isfile(cache):
+            # a stale cache must not shadow a good egg on the next run either
+            os.unlink(cache)
+            log.append(f"discarded the stale cache at {cache}")
+
+    for line in log:
+        print(f"  {line}", file=sys.stderr)
+    print(f"no egg for {t['id']} passed verification from any source "
+          f"({', '.join(d for _g, d in candidates) or 'none tried'})",
+          file=sys.stderr)
+    return None, None, log
 
 
 def cmd_hatch(a):
@@ -285,6 +315,7 @@ def cmd_hatch(a):
     # the bootout (and its 2s settle) left a window in which a SIGTERM killed
     # the process outright — rc 143, no `finally`, agent permanently booted out.
     # That window was exactly where a `timeout` or an impatient ^C lands.
+    spawned = []
     prev = {}
     if label:
         def _bail(signum, _frame):
@@ -294,25 +325,61 @@ def cmd_hatch(a):
                 prev[sig] = signal.signal(sig, _bail)
             except (ValueError, OSError):
                 pass
+    rc, interrupted = 1, False
     try:
         if label:
             print(f"  parking launchd agent {label} so it cannot respawn mid-hatch")
             subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
                            capture_output=True)
             time.sleep(2)
-        rc = _hatch_locked(a, t, egg, why, log)
-        took_the_port = (rc == 0)
+        rc = _hatch_locked(a, t, egg, why, log, spawned)
         return rc
     except KeyboardInterrupt as exc:
+        interrupted = True
+        rc = 130
         print(f"\ninterrupted ({exc}) — rolling back", file=sys.stderr)
-        return 130
+        return rc
     finally:
         for sig, handler in prev.items():
             try:
                 signal.signal(sig, handler)
             except (ValueError, OSError):
                 pass
-        if label and took_the_port:
+        # A failed or interrupted hatch leaves its spawned brainstem running as
+        # an orphan holding the port. Restoring launchd on top of that is the
+        # crash loop this block exists to prevent — the previous version keyed
+        # off `rc == 0`, which is not the same question. Reap the child first,
+        # then ask the port who owns it.
+        if rc != 0 or interrupted:
+            for c in spawned:
+                try:
+                    c.terminate()
+                    c.wait(timeout=5)
+                except Exception:
+                    try:
+                        c.kill()
+                    except Exception:
+                        pass
+            if spawned:
+                print("  stopped the brainstem this hatch started", file=sys.stderr)
+                # Wait for the socket to actually drain. Restoring immediately
+                # bootstrapped launchd into "Address already in use" twice
+                # before KeepAlive recovered — self-healing, but it writes real
+                # errors to the user's log for a rollback that supposedly
+                # succeeded.
+                for _ in range(20):
+                    if not subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
+                                          capture_output=True,
+                                          text=True).stdout.strip():
+                        break
+                    time.sleep(0.5)
+        took_the_port = (rc == 0) and http_ok(t["port"], timeout=3)
+        if label and http_ok(t["port"], timeout=3) and not took_the_port:
+            print(f"  WARNING: :{t['port']} is still held by something else, so "
+                  f"{label} was NOT restored — it would fail to bind. Free the "
+                  f"port, then:\n    launchctl bootstrap gui/{os.getuid()} "
+                  f"~/Library/LaunchAgents/{label}.plist", file=sys.stderr)
+        elif label and took_the_port:
             # DO NOT restore. The freshly hatched twin now owns the port, so
             # bootstrapping a KeepAlive agent that binds the same port puts it
             # into a silent permanent crash loop ("Address already in use"),
@@ -327,7 +394,7 @@ def cmd_hatch(a):
             restore_launchd(label)
 
 
-def _hatch_locked(a, t, egg, why, log):
+def _hatch_locked(a, t, egg, why, log, spawned):
     for _ in range(3):
         pids = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
                               capture_output=True, text=True).stdout.split()
@@ -377,8 +444,10 @@ def _hatch_locked(a, t, egg, why, log):
                AGENTS_PATH=os.path.join(root, "agents"))
     os.makedirs(ROOT, exist_ok=True)
     logf = open(os.path.join(ROOT, f"{t['id']}.log"), "a")
-    subprocess.Popen([VENV, "brainstem.py"], cwd=BRAINSTEM, env=env,
-                     stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+    child = subprocess.Popen([VENV, "brainstem.py"], cwd=BRAINSTEM, env=env,
+                             stdout=logf, stderr=subprocess.STDOUT,
+                             start_new_session=True)
+    spawned.append(child)
     for _ in range(60):
         time.sleep(0.5)
         ok, _why = hatched_ok(t, timeout=3)
