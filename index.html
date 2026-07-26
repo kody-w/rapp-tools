@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>RAPP Tools</title>
+<style>
+:root{--bg:#0e1013;--panel:#171b21;--line:#252b35;--ink:#e9edf3;--dim:#98a2b3;--accent:#7cc4ff;--good:#5ee0b0}
+@media(prefers-color-scheme:light){:root{--bg:#f5f6f8;--panel:#fff;--line:#e2e5ea;--ink:#1a1d23;--dim:#5b6472;--accent:#0b6bcb;--good:#0f9d74}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:26px 24px 16px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:22px;letter-spacing:-.01em}.sub{color:var(--dim);font-size:13.5px;margin-top:6px;max-width:70ch}
+main{padding:20px 24px 48px;max-width:1000px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px 18px}
+.card h2{margin:0 0 4px;font-size:15px}.port{color:var(--dim);font:12px ui-monospace,Menlo,monospace}
+.one{color:var(--dim);font-size:13px;margin:8px 0 12px}
+.k{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-top:10px}
+.acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.act{font:11.5px ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:2px 7px;color:var(--ink)}
+pre{margin:8px 0 0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:11.5px/1.5 ui-monospace,Menlo,monospace;overflow-x:auto;color:var(--ink)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.banner{border-left:3px solid var(--good);padding:11px 15px;background:var(--panel);border-radius:0 9px 9px 0;margin-bottom:20px;font-size:13.5px;color:var(--dim)}
+.banner b{color:var(--ink)}
+.needs{font-size:12px;color:var(--dim);margin-top:6px}
+</style></head><body>
+<header><h1>RAPP Tools</h1>
+<div class="sub">One catalogue for local-first RAPP tools. Every entry is a hatchable rapplication: it boots into its own brainstem on its own port and is driven headlessly over /chat, with a UI as an option rather than a requirement.</div></header>
+<main>
+<div class="banner"><b>Headless first, UI optional.</b> Every tool below hatches into its own
+brainstem on its own port and is driven over the same <code>/chat</code> contract — so an agent,
+a script, or a person can use it. Each ships a UI, but nothing requires one.
+<br><br><b>Nothing is vendored here.</b> Entries point at each tool's own repository, so the tool's
+repo stays the source of truth.</div>
+<div class="grid"><div class="card">
+<h2>RAPP Voice <span class="port">:7091</span></h2>
+<div class="one">Hold a key, speak, release — cleaned text appears at your cursor.</div>
+<div class="k">Headless</div>
+<pre>rapptools hatch rapp_voice
+rapptools call rapp_voice doctor</pre>
+<div class="k">Actions</div><div class="acts"><span class="act">doctor</span><span class="act">dictionary</span><span class="act">add_term</span><span class="act">stats</span><span class="act">process</span></div>
+<div class="k">Engines</div><div class="needs">whisper.cpp (localhost) · Hammerspoon</div>
+<div class="k">Needs</div><div class="needs">a whisper.cpp server on 127.0.0.1:8765; Hammerspoon with Accessibility</div>
+<div class="k">Source</div><div class="needs"><a href="https://github.com/kody-w/rapp-voice">kody-w/rapp-voice</a></div>
+</div>
+<div class="card">
+<h2>RAPP Crispy <span class="port">:7090</span></h2>
+<div class="one">Record, denoise, transcribe and summarise meetings entirely on-device.</div>
+<div class="k">Headless</div>
+<pre>rapptools hatch rapp_crispy
+rapptools call rapp_crispy doctor</pre>
+<div class="k">Actions</div><div class="acts"><span class="act">doctor</span><span class="act">record</span><span class="act">denoise</span><span class="act">transcribe</span><span class="act">notes</span><span class="act">run</span><span class="act">list</span><span class="act">read</span><span class="act">bench</span><span class="act">live_status</span></div>
+<div class="k">Engines</div><div class="needs">DeepFilterNet3 / RNNoise · whisper.cpp (localhost)</div>
+<div class="k">Needs</div><div class="needs">ffmpeg with the arnndn filter; a whisper.cpp server on 127.0.0.1:8765</div>
+<div class="k">Source</div><div class="needs"><a href="https://github.com/kody-w/rapp-crispy">kody-w/rapp-crispy</a></div>
+</div>
+<div class="card">
+<h2>RAPP Rewind <span class="port">:7092</span></h2>
+<div class="one">A local, searchable memory of everything that has been on your screen.</div>
+<div class="k">Headless</div>
+<pre>rapptools hatch rapp_rewind
+rapptools call rapp_rewind doctor</pre>
+<div class="k">Actions</div><div class="acts"><span class="act">doctor</span><span class="act">search</span><span class="act">stats</span><span class="act">capture</span><span class="act">timeline</span><span class="act">prune</span><span class="act">bench</span></div>
+<div class="k">Engines</div><div class="needs">Apple Vision OCR · SQLite FTS5</div>
+<div class="k">Needs</div><div class="needs">Screen Recording permission; ffmpeg; the rewind CLI on PATH</div>
+<div class="k">Source</div><div class="needs"><a href="https://github.com/kody-w/rapp-rewind">kody-w/rapp-rewind</a></div>
+</div>
+<div class="card">
+<h2>RAPP Shot <span class="port">:7093</span></h2>
+<div class="one">Screenshots that auto-redact credentials before they are shared.</div>
+<div class="k">Headless</div>
+<pre>rapptools hatch rapp_shot
+rapptools call rapp_shot doctor</pre>
+<div class="k">Actions</div><div class="acts"><span class="act">doctor</span><span class="act">capture</span><span class="act">ocr</span><span class="act">redact</span><span class="act">annotate</span><span class="act">list</span></div>
+<div class="k">Engines</div><div class="needs">Apple Vision OCR · CoreGraphics</div>
+<div class="k">Needs</div><div class="needs">Screen Recording permission; the shot CLI on PATH</div>
+<div class="k">Source</div><div class="needs"><a href="https://github.com/kody-w/rapp-shot">kody-w/rapp-shot</a></div>
+</div></div>
+</main></body></html>

@@ -1,0 +1,159 @@
+{
+  "schema": "rapp-tools-catalog/1.0",
+  "name": "RAPP Tools",
+  "purpose": "One catalogue for local-first RAPP tools. Every entry is a hatchable rapplication: it boots into its own brainstem on its own port and is driven headlessly over /chat, with a UI as an option rather than a requirement.",
+  "genre": "tools",
+  "federation": "Entries point at each tool's own repository. Nothing is vendored here, so the tool's repo stays the source of truth and this catalogue never goes stale in a way you cannot see.",
+  "count": 4,
+  "tools": [
+    {
+      "id": "rapp_voice",
+      "name": "RAPP Voice",
+      "repo": "rapp-voice",
+      "port": 7091,
+      "agent": "RappVoice",
+      "genre": "tools",
+      "one": "Hold a key, speak, release \u2014 cleaned text appears at your cursor.",
+      "engines": [
+        "whisper.cpp (localhost)",
+        "Hammerspoon"
+      ],
+      "actions": [
+        "doctor",
+        "dictionary",
+        "add_term",
+        "stats",
+        "process"
+      ],
+      "headless": "All actions are headless. Dictation itself needs the hotkey, so `process` is the headless path.",
+      "needs": [
+        "a whisper.cpp server on 127.0.0.1:8765",
+        "Hammerspoon with Accessibility"
+      ],
+      "egg_url": "https://raw.githubusercontent.com/kody-w/rapp-voice/main/rapp_voice/eggs/rapp_voice.egg",
+      "manifest_url": "https://raw.githubusercontent.com/kody-w/rapp-voice/main/rapp_voice/manifest.json",
+      "singleton_url": "https://raw.githubusercontent.com/kody-w/rapp-voice/main/rapp_voice/singleton/rapp_voice_agent.py",
+      "ui_url": "https://raw.githubusercontent.com/kody-w/rapp-voice/main/rapp_voice/ui/index.html",
+      "homepage": "https://github.com/kody-w/rapp-voice",
+      "runtime": "twin",
+      "publisher": "@kody-w",
+      "license": "MIT",
+      "egg_sha256": "7fdb13d53d9b20b96800f4a2c892e12dbc352a7ea3558411adaac5c1d91d28ff",
+      "egg_bytes": 5607
+    },
+    {
+      "id": "rapp_crispy",
+      "name": "RAPP Crispy",
+      "repo": "rapp-crispy",
+      "port": 7090,
+      "agent": "RappCrispy",
+      "genre": "tools",
+      "one": "Record, denoise, transcribe and summarise meetings entirely on-device.",
+      "engines": [
+        "DeepFilterNet3 / RNNoise",
+        "whisper.cpp (localhost)"
+      ],
+      "actions": [
+        "doctor",
+        "record",
+        "denoise",
+        "transcribe",
+        "notes",
+        "run",
+        "list",
+        "read",
+        "bench",
+        "live_status"
+      ],
+      "headless": "Fully headless \u2014 `run` needs `seconds` because there is no keypress to stop it.",
+      "needs": [
+        "ffmpeg with the arnndn filter",
+        "a whisper.cpp server on 127.0.0.1:8765"
+      ],
+      "egg_url": "https://raw.githubusercontent.com/kody-w/rapp-crispy/main/rapp_crispy/eggs/rapp_crispy.egg",
+      "manifest_url": "https://raw.githubusercontent.com/kody-w/rapp-crispy/main/rapp_crispy/manifest.json",
+      "singleton_url": "https://raw.githubusercontent.com/kody-w/rapp-crispy/main/rapp_crispy/singleton/rapp_crispy_agent.py",
+      "ui_url": "https://raw.githubusercontent.com/kody-w/rapp-crispy/main/rapp_crispy/ui/index.html",
+      "homepage": "https://github.com/kody-w/rapp-crispy",
+      "runtime": "twin",
+      "publisher": "@kody-w",
+      "license": "MIT",
+      "egg_sha256": "dfe1391a19cbba59002df46500ba7b3e763fb7fe6c0b9817abbc184331315795",
+      "egg_bytes": 12090
+    },
+    {
+      "id": "rapp_rewind",
+      "name": "RAPP Rewind",
+      "repo": "rapp-rewind",
+      "port": 7092,
+      "agent": "RappRewind",
+      "genre": "tools",
+      "one": "A local, searchable memory of everything that has been on your screen.",
+      "engines": [
+        "Apple Vision OCR",
+        "SQLite FTS5"
+      ],
+      "actions": [
+        "doctor",
+        "search",
+        "stats",
+        "capture",
+        "timeline",
+        "prune",
+        "bench"
+      ],
+      "headless": "Fully headless. The timeline UI is optional and generated on demand.",
+      "needs": [
+        "Screen Recording permission",
+        "ffmpeg",
+        "the rewind CLI on PATH"
+      ],
+      "egg_url": "https://raw.githubusercontent.com/kody-w/rapp-rewind/main/rapp_rewind/eggs/rapp_rewind.egg",
+      "manifest_url": "https://raw.githubusercontent.com/kody-w/rapp-rewind/main/rapp_rewind/manifest.json",
+      "singleton_url": "https://raw.githubusercontent.com/kody-w/rapp-rewind/main/rapp_rewind/singleton/rapp_rewind_agent.py",
+      "ui_url": "https://raw.githubusercontent.com/kody-w/rapp-rewind/main/rapp_rewind/ui/index.html",
+      "homepage": "https://github.com/kody-w/rapp-rewind",
+      "runtime": "twin",
+      "publisher": "@kody-w",
+      "license": "MIT",
+      "egg_sha256": "76c7b28dda43040c505c78b2c0f4c30906fc4e89afcf634837c74f0e80871d1e",
+      "egg_bytes": 3826
+    },
+    {
+      "id": "rapp_shot",
+      "name": "RAPP Shot",
+      "repo": "rapp-shot",
+      "port": 7093,
+      "agent": "RappShot",
+      "genre": "tools",
+      "one": "Screenshots that auto-redact credentials before they are shared.",
+      "engines": [
+        "Apple Vision OCR",
+        "CoreGraphics"
+      ],
+      "actions": [
+        "doctor",
+        "capture",
+        "ocr",
+        "redact",
+        "annotate",
+        "list"
+      ],
+      "headless": "Headless except region/window capture, which opens a picker; use mode=screen.",
+      "needs": [
+        "Screen Recording permission",
+        "the shot CLI on PATH"
+      ],
+      "egg_url": "https://raw.githubusercontent.com/kody-w/rapp-shot/main/rapp_shot/eggs/rapp_shot.egg",
+      "manifest_url": "https://raw.githubusercontent.com/kody-w/rapp-shot/main/rapp_shot/manifest.json",
+      "singleton_url": "https://raw.githubusercontent.com/kody-w/rapp-shot/main/rapp_shot/singleton/rapp_shot_agent.py",
+      "ui_url": "https://raw.githubusercontent.com/kody-w/rapp-shot/main/rapp_shot/ui/index.html",
+      "homepage": "https://github.com/kody-w/rapp-shot",
+      "runtime": "twin",
+      "publisher": "@kody-w",
+      "license": "MIT",
+      "egg_sha256": "c83ab670053ef9560f2fcd28b3f9b929434af94b0522e0c77b1ec4553b97517a",
+      "egg_bytes": 4160
+    }
+  ]
+}
