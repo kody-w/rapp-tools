@@ -24,7 +24,28 @@ rapptools status
 | [`rapp_rewind`](https://github.com/kody-w/rapp-rewind) | 7092 | Searchable memory of everything on your screen |
 | [`rapp_shot`](https://github.com/kody-w/rapp-shot) | 7093 | Screenshots that auto-redact credentials |
 
-All four run entirely on-device. No account, no upload, no retention policy.
+All four tools' **engines** run on-device. Read the privacy note below before you
+assume that covers the twin path too — it does not.
+
+## Two paths, two different privacy properties
+
+Be precise about this, because the distinction is real and a user can be burned by it:
+
+**The engines are on-device.** Capture, OCR, denoising, speech recognition,
+annotation, redaction, indexing and search all run locally. Your screenshots,
+recordings and transcripts are produced and stored on your own disk, and the CLIs
+make no network call at all — a test asserts that.
+
+**The twin's conversation layer is not.** Driving a rapplication over `/chat`
+routes your prompt *and whatever the agent returns* through whichever LLM the host
+brainstem is configured with. On a default install that is the GitHub Copilot API
+(`Auth: GitHub Copilot API (via gh CLI)`). So asking a twin "what did I see about
+the pricing deck?" sends the OCR'd text of your screen to that model.
+
+If you need the strict guarantee, **use the CLI** (`shot`, `rewind`, `crispy`) —
+that path is fully local. The twin exists to make the tools agent-drivable, and it
+inherits the host brainstem's model, whatever that is. Point the brainstem at a
+local model and the twin becomes local too.
 
 ## Nothing is vendored
 
