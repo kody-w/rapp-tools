@@ -93,6 +93,7 @@ def tool(tid):
 
 
 def http_ok(port, timeout=3):
+    """Port open. NOT the same as hatched — see hatched_ok."""
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=timeout) as r:
             return 200 <= r.status < 500
@@ -100,6 +101,36 @@ def http_ok(port, timeout=3):
         return True
     except Exception:
         return False
+
+
+def hatched_ok(t, timeout=6):
+    """Is THIS tool's agent actually loaded on that port?
+
+    port-open != hatched. A brainstem with an empty AGENTS_PATH answers HTTP 200
+    and chats happily as a generic assistant, so an HTTP-only check reported the
+    fleet green while one twin had no soul and no agent at all. Ask /agents."""
+    if not http_ok(t["port"], timeout=3):
+        return False, "not listening"
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{t['port']}/agents", timeout=timeout) as r:
+            body = r.read().decode("utf-8", "replace")
+    except Exception as exc:
+        return False, f"no /agents ({type(exc).__name__})"
+    if t["agent"].lower() in body.lower():
+        return True, "ok"
+    return False, f"listening but {t['agent']} is not loaded"
+
+
+def launchd_label(t):
+    """A twin may be owned by a launchd agent with KeepAlive. Killing it just
+    makes launchd respawn it, so re-hatching silently hits the old process."""
+    for cand in (f"com.rapp.{t['id'].replace('_', '-')}-twin",
+                 f"com.rapp.{t['id'].split('_')[-1]}-twin"):
+        p = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
+        if cand in (p.stdout or ""):
+            return cand
+    return None
 
 
 def chat(port, message, timeout=300):
@@ -138,9 +169,26 @@ def cmd_hatch(a):
     if not t:
         print(f"no such tool: {a.id}", file=sys.stderr)
         return 1
-    if http_ok(t["port"]) and not a.force:
-        print(f"{t['id']} already answering on :{t['port']}")
+    ready, why = hatched_ok(t)
+    if ready and not a.force:
+        print(f"{t['id']} already hatched and serving {t['agent']} on :{t['port']}")
         return 0
+    if http_ok(t["port"]) and not ready:
+        print(f"  :{t['port']} is occupied but {why} — replacing it")
+    label = launchd_label(t)
+    if label:
+        print(f"  parking launchd agent {label} so it cannot respawn mid-hatch")
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
+                       capture_output=True)
+        time.sleep(2)
+    for _ in range(3):
+        pids = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
+                              capture_output=True, text=True).stdout.split()
+        if not pids:
+            break
+        for pid in pids:
+            subprocess.run(["kill", pid], capture_output=True)
+        time.sleep(1.5)
     if not os.path.isdir(BRAINSTEM):
         print(f"no brainstem at {BRAINSTEM} — set BRAINSTEM_SRC", file=sys.stderr)
         return 1
@@ -196,9 +244,16 @@ def cmd_hatch(a):
     logf = open(os.path.join(ROOT, f"{t['id']}.log"), "a")
     subprocess.Popen([VENV, "brainstem.py"], cwd=BRAINSTEM, env=env,
                      stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
-    for _ in range(40):
+    for _ in range(60):
         time.sleep(0.5)
-        if http_ok(t["port"]):
+        ok, _why = hatched_ok(t, timeout=3)
+        if ok:
+            if label:
+                subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}",
+                                os.path.expanduser(
+                                    f"~/Library/LaunchAgents/{label}.plist")],
+                               capture_output=True)
+                print(f"  restored launchd agent {label}")
             print(f"{t['id']} hatched on :{t['port']}")
             print(f"  egg      {why}")
             print(f"  cubby    {root}")
@@ -267,13 +322,18 @@ def cmd_ask(a):
 
 def cmd_status(a):
     c = catalog()
-    print(f"{'TOOL':<13} {'PORT':<6} {'STATE':<9} SOURCE")
+    print(f"{'TOOL':<13} {'PORT':<6} {'STATE':<12} DETAIL")
     up = 0
     for t in c["tools"]:
-        live = http_ok(t["port"])
-        up += 1 if live else 0
-        print(f"{t['id']:<13} {t['port']:<6} {'running' if live else 'stopped':<9} {t['homepage']}")
-    print(f"\n{up}/{len(c['tools'])} hatched.")
+        ok, why = hatched_ok(t)
+        up += 1 if ok else 0
+        state = "serving" if ok else ("DEGRADED" if http_ok(t["port"]) else "stopped")
+        print(f"{t['id']:<13} {t['port']:<6} {state:<12} "
+              f"{t['agent'] + ' loaded' if ok else why}")
+    print(f"\n{up}/{len(c['tools'])} serving their agent.")
+    if up < len(c["tools"]):
+        print("DEGRADED means a process is listening on the port but this tool's "
+              "agent is not loaded — port-open is not hatched.")
     if up:
         print("All of them answer the same /chat contract, so anything that can POST "
               "JSON can drive them — no UI required.")
@@ -285,14 +345,23 @@ def cmd_stop(a):
     if not t:
         print(f"no such tool: {a.id}", file=sys.stderr)
         return 1
+    label = launchd_label(t)
+    if label:
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
+                       capture_output=True)
+        print(f"booted out launchd agent {label}")
+        time.sleep(2)
     p = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"], capture_output=True, text=True)
     pids = [x for x in (p.stdout or "").split() if x.isdigit()]
-    if not pids:
-        print(f"{t['id']} is not running")
-        return 0
     for pid in pids:
-        subprocess.run(["kill", pid])
-    print(f"stopped {t['id']} (pid {', '.join(pids)})")
+        subprocess.run(["kill", pid], capture_output=True)
+    time.sleep(1.5)
+    # tell the truth about whether it actually stopped
+    if http_ok(t["port"], timeout=2):
+        print(f"{t['id']}: something is STILL listening on :{t['port']} — "
+              f"if it is launchd-managed, its plist may need removing")
+        return 1
+    print(f"stopped {t['id']}" + (f" (pid {', '.join(pids)})" if pids else ""))
     return 0
 
 
