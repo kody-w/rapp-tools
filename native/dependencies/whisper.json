@@ -1,0 +1,23 @@
+{
+  "schema": "rapp-native-build-dependency/1.0",
+  "name": "whisper.cpp",
+  "version": "1.9.2",
+  "source_url": "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.2.tar.gz",
+  "source_sha256": "a6abd064fcca8b85e794d205abf328c522e9451db43a3eadc178b883b7d0e9cd",
+  "license": "MIT",
+  "source_license_path": "LICENSE",
+  "executable": "whisper-cli",
+  "minimum_macos": "14.0",
+  "architectures": ["arm64", "x86_64"],
+  "build_tools": ["cmake", "xcodebuild"],
+  "cmake_options": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
+    "BUILD_SHARED_LIBS": "OFF",
+    "GGML_NATIVE": "OFF",
+    "GGML_OPENMP": "OFF",
+    "WHISPER_BUILD_TESTS": "OFF",
+    "WHISPER_BUILD_EXAMPLES": "ON",
+    "WHISPER_SDL2": "OFF"
+  }
+}

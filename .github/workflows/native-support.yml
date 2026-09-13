@@ -1,0 +1,34 @@
+name: Native macOS support
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test native support
+        run: swift test -j 2
+      - name: Test runtime build guards
+        run: python3 -m unittest discover -s native/verification -p 'test_*.py' -v
+      - name: Generate original application icons
+        run: |
+          mkdir -p native/.cache
+          for product in RAPPShot RAPPRewind RAPPVoice RAPPCrispy; do
+            swift native/packaging/make_icon.swift "$product" "native/.cache/$product.iconset"
+            iconutil -c icns "native/.cache/$product.iconset" -o "native/.cache/$product.icns"
+          done
