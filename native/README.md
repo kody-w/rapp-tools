@@ -67,11 +67,13 @@ python3 native/packaging/make_desktop_evidence.py \
 
 The emitter checks the workflow's actual repository, source commit, status,
 and conclusion, then re-extracts and verifies the signed/stapled application.
-It writes the store's `.zip.evidence.json` and artifact descriptor beside the
-ZIP, with actual command reports and final byte/hash bindings. Local parent
-directories are removed from reports; app-relative identifiers and all
-verification results are preserved. Publishing the release and submitting
-the catalog update remain explicit separate operations.
+It writes content-addressed `.zip.evidence.<sha256>.json` reports and an
+artifact descriptor beside the ZIP, with actual command reports and final
+byte/hash bindings. Corrections create new reports rather than overwriting
+published evidence or native ZIPs. Local parent directories, including
+macOS `/var`/`/private/var` aliases, are removed from reports; app-relative
+identifiers and all verification results are preserved. Publishing the release
+and submitting the catalog update remain explicit separate operations.
 
 ## Verification
 

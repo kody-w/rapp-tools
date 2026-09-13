@@ -14,6 +14,22 @@ SPEC.loader.exec_module(release)
 
 
 class ReleaseAppTests(unittest.TestCase):
+    def test_report_normalization_handles_macos_private_path_alias(self):
+        app = Path("/var/folders/fixture/RAPPVoice.app")
+        real = Path("/private/var/folders/fixture/RAPPVoice.app")
+        report = f"Executable={real}/Contents/MacOS/RAPPVoice\n{app}: accepted\n"
+        with patch.object(Path, "resolve", return_value=real):
+            actual = release.portable_report(report, app)
+        self.assertEqual(
+            actual, "Executable=RAPPVoice.app/Contents/MacOS/RAPPVoice\nRAPPVoice.app: accepted\n"
+        )
+        self.assertNotIn("/privateRAPPVoice", actual)
+
+    def test_report_normalization_preserves_unrelated_text(self):
+        app = Path("/build/release/App.app")
+        report = "source=Notarized Developer ID\nAuthority=Developer ID Application: Fixture\n"
+        self.assertEqual(release.portable_report(report, app), report)
+
     def signature(self, authority="Developer ID Application: Fixture",
                   team="TEAM123456", runtime=True, timestamp=True):
         return "\n".join([
