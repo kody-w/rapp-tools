@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic egg packer — same contents in, byte-identical egg out.
+"""Historical ZIP packer, NOT the current RAPP/1 canonical egg producer.
 
 WHY THIS EXISTS.
 
@@ -90,11 +90,14 @@ def main(argv):
         return 2
     blob = pack_bytes(src)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    # only rewrite when the bytes differ, so an unchanged egg stays unchanged in git
+    # Existing archives are immutable, even when source has changed.
     if os.path.exists(out) and open(out, "rb").read() == blob:
         print(f"unchanged     {hashlib.sha256(blob).hexdigest()}  {out}")
         return 0
-    with open(out, "wb") as fh:
+    if os.path.lexists(out):
+        print(f"refusing to replace an existing immutable archive: {out}", file=sys.stderr)
+        return 1
+    with open(out, "xb") as fh:
         fh.write(blob)
     print(f"packed        {hashlib.sha256(blob).hexdigest()}  {out}")
     return 0

@@ -1,0 +1,19 @@
+{
+  "schema": "rapp-workspace-source-pins/1",
+  "authority": {
+    "repository": "kody-w/rapp-1",
+    "commit": "dda32d741c7218f41443a5bd17eebfe0eae82cb7",
+    "filename": "authority.zip",
+    "sha256": "d3f1debcbcc8c9dd6e51e6609daf32c2e8eb9ae9ed73de454f67f6341044ebf6",
+    "bytes": 1021355,
+    "file_count": 41
+  },
+  "workspace": {
+    "repository": "kody-w/rapp-workspace",
+    "commit": "44f6f124c47ed610b32e4d78f596b9b099669657",
+    "filename": "workspace.zip",
+    "sha256": "e940960cf245da5e3f603148c32d0337d42369578db1430ade1ce562c68e9793",
+    "bytes": 1389750,
+    "file_count": 67
+  }
+}

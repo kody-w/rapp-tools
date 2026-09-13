@@ -4,8 +4,12 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RT="$HERE/../rapptools"
 CAT="$HERE/../catalog/catalog.json"
-if [ "${1:-}" = "--safe" ]; then
+if [ "${1:---safe}" = "--safe" ]; then
   exec python3 -m unittest discover -s "$HERE/../native/verification" -p 'test_native_catalog.py' -v
+fi
+if [ "${1:-}" != "--live-legacy" ] || [ "$#" != 1 ]; then
+  printf '%s\n' "Use --safe (default), or explicitly authorize --live-legacy for network/private fleet checks." >&2
+  exit 2
 fi
 pass=0; fail=0
 ok(){ printf '  \033[32mPASS\033[0m %s\n' "$*"; pass=$((pass+1)); }
