@@ -6,7 +6,6 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
 import plistlib
 import re
@@ -69,7 +68,10 @@ def only_app(directory: Path) -> Path:
 
 
 def portable_report(output: str, app: Path) -> str:
-    return output.replace(str(app.parent) + os.sep, "")
+    aliases = {str(app), str(app.resolve())}
+    for alias in sorted(aliases, key=len, reverse=True):
+        output = output.replace(alias, app.name)
+    return output
 
 
 def signature_info(path: Path, expected_team: str, report_root: Path | None = None) -> dict:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import posixpath
@@ -124,13 +125,19 @@ def make_evidence(result_path: Path, repo: str, workflow_run: str) -> dict:
         "gatekeeper": observed["gatekeeper"],
         "stapler": observed["stapler"],
     }
-    evidence_path = result_path.parent / (filename + ".evidence.json")
-    evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+    evidence_bytes = (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    evidence_hash = hashlib.sha256(evidence_bytes).hexdigest()
+    evidence_name = filename + f".evidence.{evidence_hash}.json"
+    evidence_path = result_path.parent / evidence_name
+    if evidence_path.exists() and evidence_path.read_bytes() != evidence_bytes:
+        raise release_app.ReleaseError("Existing immutable evidence does not match its content address.")
+    if not evidence_path.exists():
+        evidence_path.write_bytes(evidence_bytes)
     entry = {
         "arch": arch, "format": "zip", "url": asset_url,
         "bytes": artifact["bytes"], "sha256": artifact["sha256"],
         "evidence": {
-            "url": asset_url + ".evidence.json",
+            "url": f"https://github.com/{repo}/releases/download/v{version}/{evidence_name}",
             "bytes": evidence_path.stat().st_size,
             "sha256": release_app.sha256(evidence_path),
         },
