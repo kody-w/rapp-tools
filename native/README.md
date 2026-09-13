@@ -56,6 +56,23 @@ commits. `distribution_verified` is not a substitute for application workflow,
 privacy, hardware, and publication checks. Nothing in this helper changes a
 live catalog or publishes a GitHub release.
 
+After the native source commit has a successful public CI run, generate
+store-bound evidence from the final ZIP:
+
+```sh
+python3 native/packaging/make_desktop_evidence.py \
+  --result /path/to/release-result.json --repo kody-w/rapp-voice \
+  --workflow-run https://github.com/kody-w/rapp-voice/actions/runs/RUN_ID
+```
+
+The emitter checks the workflow's actual repository, source commit, status,
+and conclusion, then re-extracts and verifies the signed/stapled application.
+It writes the store's `.zip.evidence.json` and artifact descriptor beside the
+ZIP, with actual command reports and final byte/hash bindings. Local parent
+directories are removed from reports; app-relative identifiers and all
+verification results are preserved. Publishing the release and submitting
+the catalog update remain explicit separate operations.
+
 ## Verification
 
 ```sh
