@@ -6,10 +6,10 @@ Discovery and build infrastructure for four independent local-first macOS apps.
 
 | Application | Native release |
 |---|---|
-| RAPP Voice | [1.1.0 - Apple silicon and Intel](https://github.com/kody-w/rapp-voice/releases/tag/v1.1.0) |
-| RAPP Crispy | [1.5.0 - Apple silicon and Intel](https://github.com/kody-w/rapp-crispy/releases/tag/v1.5.0) |
-| RAPP Rewind | [1.2.0 - Apple silicon and Intel](https://github.com/kody-w/rapp-rewind/releases/tag/v1.2.0) |
-| RAPP Shot | [1.3.0 - Apple silicon and Intel](https://github.com/kody-w/rapp-shot/releases/tag/v1.3.0) |
+| RAPP Voice | [1.1.1 - Apple silicon and Intel](https://github.com/kody-w/rapp-voice/releases/tag/v1.1.1) |
+| RAPP Crispy | [1.5.1 - Apple silicon and Intel](https://github.com/kody-w/rapp-crispy/releases/tag/v1.5.1) |
+| RAPP Rewind | [1.2.1 - Apple silicon and Intel](https://github.com/kody-w/rapp-rewind/releases/tag/v1.2.1) |
+| RAPP Shot | [1.3.1 - Apple silicon and Intel](https://github.com/kody-w/rapp-shot/releases/tag/v1.3.1) |
 
 Requires macOS 14 or newer. Unzip the architecture-specific download in Finder
 and move the app to Applications. Released apps are Developer ID-signed,
@@ -26,6 +26,10 @@ operator inventories source and nested archives without running application
 code, verifies the pinned current RAPP/1 reference, and prepares an additive
 root skill entry plus a checksum-pinned bootstrap. Existing root skill content
 and case-sensitive public URLs are preserved.
+
+The skill is also published in the separate
+[RAR Skills catalog](https://kody-w.github.io/RAR/skills.html), with an immutable
+source revision and per-file hashes. It is not an agent-registry entry.
 
 ```sh
 python3 rapp_workspace.py audit /path/to/application --allow-network

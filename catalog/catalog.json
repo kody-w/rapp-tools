@@ -3,21 +3,21 @@
   "name": "RAPP Tools",
   "purpose": "Discovery and build infrastructure for four independent native macOS applications. Native releases need no Brainstem, Homebrew, Python, or terminal. Historical CLI/twin metadata remains available separately for compatibility.",
   "genre": "tools",
-  "federation": "Entries point at each tool's own repository. Nothing is vendored here, so the tool's repo stays the source of truth and this catalogue never goes stale in a way you cannot see.",
+  "federation": "Application entries point at each tool's own repository and immutable native release source. The separate refresh skill and licensed reference tooling are operator capabilities, not copies of the four applications.",
   "count": 4,
   "tools": [
     {
       "id": "rapp_voice",
       "name": "RAPP Voice",
       "native_release": {
-        "version": "1.1.0",
+        "version": "1.1.1",
         "minimum_macos": "14.0",
-        "source_commit": "45e5529509c04b2b346e27b8b8a82c59cb5ec32d",
-        "release_url": "https://github.com/kody-w/rapp-voice/releases/tag/v1.1.0",
+        "source_commit": "75d10cc14819573f6d771231a0677aa21e157c47",
+        "release_url": "https://github.com/kody-w/rapp-voice/releases/tag/v1.1.1",
         "store_url": "https://kody-w.github.io/RAPP_Store/#rapp=rapp_voice",
         "downloads": {
-          "arm64": "https://github.com/kody-w/rapp-voice/releases/download/v1.1.0/rapp_voice-1.1.0-arm64.zip",
-          "x86_64": "https://github.com/kody-w/rapp-voice/releases/download/v1.1.0/rapp_voice-1.1.0-x86_64.zip"
+          "arm64": "https://github.com/kody-w/rapp-voice/releases/download/v1.1.1/rapp_voice-1.1.1-arm64.zip",
+          "x86_64": "https://github.com/kody-w/rapp-voice/releases/download/v1.1.1/rapp_voice-1.1.1-x86_64.zip"
         },
         "setup": "Unzip in Finder, move the app to Applications, select a verified local speech model, and grant only the microphone/input permissions you choose. Cloud polish is off until consent."
       },
@@ -58,14 +58,14 @@
       "id": "rapp_crispy",
       "name": "RAPP Crispy",
       "native_release": {
-        "version": "1.5.0",
+        "version": "1.5.1",
         "minimum_macos": "14.0",
-        "source_commit": "656537dacb605d0298a9552ffc882936cec41cc3",
-        "release_url": "https://github.com/kody-w/rapp-crispy/releases/tag/v1.5.0",
+        "source_commit": "873c06fd2930c8948e61e800abbf10af691ffb2d",
+        "release_url": "https://github.com/kody-w/rapp-crispy/releases/tag/v1.5.1",
         "store_url": "https://kody-w.github.io/RAPP_Store/#rapp=rapp_crispy",
         "downloads": {
-          "arm64": "https://github.com/kody-w/rapp-crispy/releases/download/v1.5.0/rapp_crispy-1.5.0-arm64.zip",
-          "x86_64": "https://github.com/kody-w/rapp-crispy/releases/download/v1.5.0/rapp_crispy-1.5.0-x86_64.zip"
+          "arm64": "https://github.com/kody-w/rapp-crispy/releases/download/v1.5.1/rapp_crispy-1.5.1-arm64.zip",
+          "x86_64": "https://github.com/kody-w/rapp-crispy/releases/download/v1.5.1/rapp_crispy-1.5.1-x86_64.zip"
         },
         "setup": "Unzip in Finder and move the app to Applications. Native Apple voice processing and transcription are local; optional cloud notes require consent. Advanced legacy engines and loopback devices are not silently installed."
       },
@@ -111,14 +111,14 @@
       "id": "rapp_rewind",
       "name": "RAPP Rewind",
       "native_release": {
-        "version": "1.2.0",
+        "version": "1.2.1",
         "minimum_macos": "14.0",
-        "source_commit": "34361996042c0548065dbd7e3ba5456b6cfffaee",
-        "release_url": "https://github.com/kody-w/rapp-rewind/releases/tag/v1.2.0",
+        "source_commit": "461e54a49d2ed5422511f271a473bfa7e4112d77",
+        "release_url": "https://github.com/kody-w/rapp-rewind/releases/tag/v1.2.1",
         "store_url": "https://kody-w.github.io/RAPP_Store/#rapp=rapp_rewind",
         "downloads": {
-          "arm64": "https://github.com/kody-w/rapp-rewind/releases/download/v1.2.0/rapp_rewind-1.2.0-arm64.zip",
-          "x86_64": "https://github.com/kody-w/rapp-rewind/releases/download/v1.2.0/rapp_rewind-1.2.0-x86_64.zip"
+          "arm64": "https://github.com/kody-w/rapp-rewind/releases/download/v1.2.1/rapp_rewind-1.2.1-arm64.zip",
+          "x86_64": "https://github.com/kody-w/rapp-rewind/releases/download/v1.2.1/rapp_rewind-1.2.1-x86_64.zip"
         },
         "setup": "Unzip in Finder and move the app to Applications. Screen history remains local. Capture stays off until you enable it and grant normal Screen Recording permission; review exclusions and retention first."
       },
@@ -162,14 +162,14 @@
       "id": "rapp_shot",
       "name": "RAPP Shot",
       "native_release": {
-        "version": "1.3.0",
+        "version": "1.3.1",
         "minimum_macos": "14.0",
-        "source_commit": "6f354f463b9d59ae308d7ab7b40f3f0704685873",
-        "release_url": "https://github.com/kody-w/rapp-shot/releases/tag/v1.3.0",
+        "source_commit": "3310780e800da97c6c9cf4b1e3c489158de0e2ed",
+        "release_url": "https://github.com/kody-w/rapp-shot/releases/tag/v1.3.1",
         "store_url": "https://kody-w.github.io/RAPP_Store/#rapp=rapp_shot",
         "downloads": {
-          "arm64": "https://github.com/kody-w/rapp-shot/releases/download/v1.3.0/rapp_shot-1.3.0-arm64.zip",
-          "x86_64": "https://github.com/kody-w/rapp-shot/releases/download/v1.3.0/rapp_shot-1.3.0-x86_64.zip"
+          "arm64": "https://github.com/kody-w/rapp-shot/releases/download/v1.3.1/rapp_shot-1.3.1-arm64.zip",
+          "x86_64": "https://github.com/kody-w/rapp-shot/releases/download/v1.3.1/rapp_shot-1.3.1-x86_64.zip"
         },
         "setup": "Unzip in Finder and move the app to Applications. Capture, OCR and annotation stay local. Grant Screen Recording only when capturing and review every redacted export; detection is not a guarantee."
       },
