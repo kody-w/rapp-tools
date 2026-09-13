@@ -22,6 +22,15 @@ bundle. Build output alone is not a signed/notarized release. Final distribution
 must verify nested signing, notarization, the stapled app/container, and hashes
 of the final artifacts.
 
+The build manifest's `executable: bin/whisper-cli` and `executable_sha256` describe
+the **pre-sign build output**, not the final application. Release assembly checks
+that manifest against the dependency lock, preserves its hash, and records the
+actual `bundle_executable: Contents/MacOS/whisper-cli`. Apple signing changes
+executable bytes; post-sign hashes are measured separately in
+`release-result.json` under `verification.helpers` and the immutable public
+evidence. The manifest embedded before signing never claims to contain a
+circular post-sign hash. Previously published bundles/reports remain unchanged.
+
 Model data is separate from executable code. The shared Swift package pins
 approved base/small English models to an immutable repository revision and
 verifies size and SHA-256 before activation. Apps must present the model's

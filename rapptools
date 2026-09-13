@@ -19,12 +19,17 @@ so the tool's repo stays the source of truth. The only thing centralised is
 
 import argparse
 import hashlib
+import io
 import json
 import os
+from pathlib import Path, PurePosixPath
+import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -89,6 +94,8 @@ def catalog():
 
 def tool(tid):
     for t in catalog()["tools"]:
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,79}", t.get("id", "")):
+            raise ValueError("Catalog contains an unsafe tool identifier")
         if t["id"] == tid or t["id"].replace("_", "-") == tid:
             return t
     return None
@@ -182,8 +189,8 @@ def verify_egg(t, egg, source_desc):
     want = (t.get("egg_sha256") or "").strip().lower()
     got = sha256_of(egg)
     if not want:
-        print(f"  sha256   {got[:16]}… (catalog publishes no digest — unverified)")
-        return True
+        print("Catalog has no archive digest; refusing to execute unverified code.", file=sys.stderr)
+        return False
     if want != got:
         print(f"egg digest mismatch for {t['id']} — refusing to extract\n"
               f"  source   {source_desc}\n"
@@ -192,6 +199,76 @@ def verify_egg(t, egg, source_desc):
         return False
     print(f"  sha256   {got[:16]}… verified against the catalog")
     return True
+
+
+def process_record(t):
+    path = Path(ROOT) / (t["id"] + ".process.json")
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError("Refusing a symlink process-ownership path")
+    return path
+
+
+def process_identity(pid):
+    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+                            capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def owned_process(t):
+    path = process_record(t)
+    if not path.is_file():
+        return None
+    record = json.loads(path.read_bytes())
+    pid = record.get("pid")
+    if record.get("tool") != t["id"] or type(pid) is not int or pid <= 1:
+        raise ValueError("Invalid process-ownership receipt")
+    observed = process_identity(pid)
+    if observed is None:
+        path.unlink()
+        return None
+    if observed != record.get("identity"):
+        raise ValueError("Recorded PID was reused or changed; refusing to signal it")
+    return pid
+
+
+def stop_owned(t):
+    pid = owned_process(t)
+    if pid is not None:
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(50):
+            if process_identity(pid) is None:
+                process_record(t).unlink(missing_ok=True)
+                break
+            time.sleep(0.1)
+        else:
+            raise ValueError("The owned process did not stop; no stronger signal or unrelated process was used")
+    if http_ok(t["port"], timeout=2):
+        raise ValueError("The port is held by an unowned service; stop it through its owner, not by port number")
+    return pid
+
+
+def validate_legacy_archive(egg):
+    with zipfile.ZipFile(egg) as archive:
+        seen, total = set(), 0
+        infos = archive.infolist()
+        if len(infos) > 10000:
+            raise ValueError("Historical archive has too many members")
+        for info in infos:
+            name = info.filename.rstrip("/") if info.is_dir() else info.filename
+            parts = name.split("/")
+            if (not name or "\\" in name or PurePosixPath(name).is_absolute()
+                    or any(part in {"", ".", ".."} for part in parts) or name in seen):
+                raise ValueError("Historical archive has an unsafe or duplicate member")
+            seen.add(name)
+            if stat.S_IFMT(info.external_attr >> 16) not in (0, stat.S_IFREG, stat.S_IFDIR):
+                raise ValueError("Historical archive contains a non-regular member")
+            total += info.file_size
+            if total > 128 * 1024 * 1024:
+                raise ValueError("Historical archive exceeds its expanded-byte limit")
+        if not {"twin/soul.md"} <= seen or not any(name.startswith("twin/agents/") for name in seen):
+            raise ValueError("Historical twin archive has no soul or agents")
+        if archive.testzip() is not None:
+            raise ValueError("Historical archive failed CRC verification")
 
 
 def restore_launchd(label):
@@ -304,11 +381,15 @@ def cmd_hatch(a):
     if egg is None:
         return 1
 
-    if http_ok(t["port"]) and not ready:
-        print(f"  :{t['port']} is occupied but {why_ready} — replacing it")
+    validate_legacy_archive(egg)
+    if http_ok(t["port"]) and owned_process(t) is None:
+        print(f":{t['port']} belongs to an unowned service; stop it through its owner first.", file=sys.stderr)
+        return 1
 
-    # 2. Park the launchd owner, if any, so KeepAlive cannot respawn mid-hatch.
     label = launchd_label(t)
+    if label:
+        print(f"Existing launchd job {label} must be managed by its owner; it was not changed.", file=sys.stderr)
+        return 1
     took_the_port = False
 
     # Arm the signal handlers BEFORE parking, not after. Installing them after
@@ -406,54 +487,50 @@ def cmd_hatch(a):
 
 
 def _hatch_locked(a, t, egg, why, log, spawned):
-    for _ in range(3):
-        pids = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"],
-                              capture_output=True, text=True).stdout.split()
-        if not pids:
-            break
-        for pid in pids:
-            subprocess.run(["kill", pid], capture_output=True)
-        time.sleep(1.5)
     if not os.path.isdir(BRAINSTEM):
         print(f"no brainstem at {BRAINSTEM} — set BRAINSTEM_SRC", file=sys.stderr)
         return 1
-
     root, _cache, _remote = cubby_paths(t)
-
-    # A twin accumulates memory in .brainstem_data. `--force` is the documented
-    # way to re-hatch, and it used to rmtree that without a word. Carry it over.
-    state = os.path.join(root, ".brainstem_data")
-    carried = None
-    if os.path.isdir(state) and os.listdir(state):
-        carried = os.path.join(ROOT, f".carry-{t['id']}")
-        shutil.rmtree(carried, ignore_errors=True)
-        os.makedirs(os.path.dirname(carried), exist_ok=True)
-        shutil.copytree(state, carried)
-        # NOTE: today's brainstem hardcodes its data dir next to itself rather
-        # than under the cubby, so this only ever carries files someone put here
-        # by hand. Kept because --force is documented as the way to re-hatch and
-        # silently rmtree-ing a state directory is not something to leave armed.
-        print(f"  preserving {len(os.listdir(state))} item(s) of twin state "
-              f"(anything placed under the cubby by hand)")
-
-    shutil.rmtree(root, ignore_errors=True)
-    os.makedirs(root, exist_ok=True)
-    with zipfile.ZipFile(egg) as z:
-        z.extractall(root)
-    # SPEC §13.3: materialise an isolated twin root
-    shutil.move(os.path.join(root, "twin", "soul.md"), os.path.join(root, "soul.md"))
-    shutil.move(os.path.join(root, "twin", "agents"), os.path.join(root, "agents"))
-    base = os.path.join(BRAINSTEM, "agents", "basic_agent.py")
-    if os.path.exists(base):
-        shutil.copy(base, os.path.join(root, "agents"))
-    os.makedirs(state, exist_ok=True)
-    if carried:
-        for name in os.listdir(carried):
-            src = os.path.join(carried, name)
-            dst = os.path.join(state, name)
-            (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, dst)
-        shutil.rmtree(carried, ignore_errors=True)
-        print("  twin state restored into the new cubby")
+    destination = Path(root)
+    for path in (Path(CUBBY_ROOT), destination.parent, destination):
+        if path.is_symlink():
+            raise ValueError("Refusing a symlinked twin installation path")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with open(egg, "rb") as handle:
+        blob = handle.read(128 * 1024 * 1024 + 1)
+    if len(blob) > 128 * 1024 * 1024 or hashlib.sha256(blob).hexdigest() != t.get("egg_sha256"):
+        raise ValueError("The archive changed after resolution; no process or installation was touched")
+    validate_legacy_archive(io.BytesIO(blob))
+    with tempfile.TemporaryDirectory(prefix=".hatch-", dir=destination.parent) as temporary:
+        staged = Path(temporary) / "next"
+        staged.mkdir()
+        with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            archive.extractall(staged)
+        shutil.move(str(staged / "twin/soul.md"), str(staged / "soul.md"))
+        shutil.move(str(staged / "twin/agents"), str(staged / "agents"))
+        base = Path(BRAINSTEM) / "agents/basic_agent.py"
+        if base.is_file():
+            shutil.copy2(base, staged / "agents")
+        state = destination / ".brainstem_data"
+        if state.is_symlink():
+            raise ValueError("Refusing a symlinked twin state directory")
+        stop_owned(t)
+        if state.is_dir():
+            shutil.copytree(state, staged / ".brainstem_data", symlinks=True)
+        else:
+            (staged / ".brainstem_data").mkdir()
+        backup = None
+        if destination.exists():
+            backup = Path(tempfile.mkdtemp(prefix="previous-", dir=destination.parent)) / "hatched"
+            destination.rename(backup)
+        try:
+            staged.rename(destination)
+        except OSError:
+            if backup is not None:
+                backup.rename(destination)
+            raise
+        if backup is not None:
+            print(f"Previous installation and all user files retained at {backup}")
 
     env = dict(os.environ, PORT=str(t["port"]),
                SOUL_PATH=os.path.join(root, "soul.md"),
@@ -464,6 +541,12 @@ def _hatch_locked(a, t, egg, why, log, spawned):
                              stdout=logf, stderr=subprocess.STDOUT,
                              start_new_session=True)
     spawned.append(child)
+    identity = process_identity(child.pid)
+    if identity is None:
+        raise ValueError("The newly started twin exited before ownership could be recorded")
+    record = process_record(t)
+    with record.open("w") as handle:
+        json.dump({"tool": t["id"], "pid": child.pid, "identity": identity}, handle)
     for _ in range(60):
         time.sleep(0.5)
         ok, _why = hatched_ok(t, timeout=3)
@@ -490,21 +573,24 @@ def cmd_call(a):
         print(f"{t['id']} has no action '{a.action}'. Try: {', '.join(t['actions'])}",
               file=sys.stderr)
         return 2
-    if not http_ok(t["port"]):
-        print(f"{t['id']} is not running — rapptools hatch {t['id']}", file=sys.stderr)
-        return 1
     args = {"action": a.action}
     for kv in (a.arg or []):
         if "=" not in kv:
             print(f"bad argument {kv!r}, expected key=value", file=sys.stderr)
             return 2
         k, v = kv.split("=", 1)
+        if not k or k == "action" or k in args:
+            print("Arguments cannot replace the validated action or duplicate a key.", file=sys.stderr)
+            return 2
         if v.lower() in ("true", "false"):
             args[k] = v.lower() == "true"
         elif v.lstrip("-").isdigit():
             args[k] = int(v)
         else:
             args[k] = v
+    if not http_ok(t["port"]):
+        print(f"{t['id']} is not running — rapptools hatch {t['id']}", file=sys.stderr)
+        return 1
     # The agent is reached through the same /chat contract a human uses — there is
     # no second, privileged path. Passing the args as JSON keeps it unambiguous.
     msg = f"{t['agent']} {json.dumps(args)}"
@@ -513,7 +599,10 @@ def cmd_call(a):
     except Exception as exc:
         print(f"call failed: {exc}", file=sys.stderr)
         return 1
-    print((d.get("response") or "").strip())
+    if not isinstance(d, dict) or not isinstance(d.get("response"), str) or not d["response"].strip():
+        print("The conversational host returned no usable response.", file=sys.stderr)
+        return 1
+    print(d["response"].strip())
     return 0
 
 
@@ -530,7 +619,10 @@ def cmd_ask(a):
     except Exception as exc:
         print(f"ask failed: {exc}", file=sys.stderr)
         return 1
-    print((d.get("response") or "").strip())
+    if not isinstance(d, dict) or not isinstance(d.get("response"), str) or not d["response"].strip():
+        print("The conversational host returned no usable response.", file=sys.stderr)
+        return 1
+    print(d["response"].strip())
     return 0
 
 
@@ -559,23 +651,8 @@ def cmd_stop(a):
     if not t:
         print(f"no such tool: {a.id}", file=sys.stderr)
         return 1
-    label = launchd_label(t)
-    if label:
-        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
-                       capture_output=True)
-        print(f"booted out launchd agent {label}")
-        time.sleep(2)
-    p = subprocess.run(["lsof", "-ti", f"tcp:{t['port']}"], capture_output=True, text=True)
-    pids = [x for x in (p.stdout or "").split() if x.isdigit()]
-    for pid in pids:
-        subprocess.run(["kill", pid], capture_output=True)
-    time.sleep(1.5)
-    # tell the truth about whether it actually stopped
-    if http_ok(t["port"], timeout=2):
-        print(f"{t['id']}: something is STILL listening on :{t['port']} — "
-              f"if it is launchd-managed, its plist may need removing")
-        return 1
-    print(f"stopped {t['id']}" + (f" (pid {', '.join(pids)})" if pids else ""))
+    pid = stop_owned(t)
+    print(f"stopped {t['id']}" + (f" (owned pid {pid})" if pid else " (not running)"))
     return 0
 
 
@@ -585,7 +662,7 @@ def cmd_hatch_all(a):
         ns = argparse.Namespace(id=t["id"], force=a.force, source=a.source)
         rc |= cmd_hatch(ns)
     print()
-    return cmd_status(a)
+    return cmd_status(a) or rc
 
 
 def main():
@@ -636,7 +713,11 @@ def main():
     if not getattr(a, "fn", None):
         p.print_help()
         return 0
-    return a.fn(a)
+    try:
+        return a.fn(a)
+    except (OSError, ValueError, zipfile.BadZipFile) as error:
+        print(f"rapptools failed: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

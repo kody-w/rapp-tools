@@ -162,9 +162,15 @@ def verify_app(app: Path, product: str, architecture: str, team: str) -> dict:
 def stage_runtime(app: Path, runtime_root: Path, architecture: str) -> dict:
     runtime = runtime_root / architecture
     manifest = json.loads((runtime / "runtime.json").read_text())
+    lock = json.loads((ROOT / "native/dependencies/whisper.json").read_text())
     helper = runtime / "bin/whisper-cli"
     if manifest.get("architecture") != architecture:
         raise ReleaseError("Runtime manifest has the wrong architecture.")
+    for key in ("name", "version", "minimum_macos", "source_url", "source_sha256", "license"):
+        if manifest.get(key) != lock.get(key):
+            raise ReleaseError("The speech runtime provenance differs from the reviewed dependency lock.")
+    if manifest.get("executable") != "bin/whisper-cli":
+        raise ReleaseError("The speech runtime has an unexpected build-relative executable path.")
     if sha256(helper) != manifest.get("executable_sha256"):
         raise ReleaseError("The staged speech runtime does not match its verified build.")
     libraries = command(["otool", "-L", str(helper)]).splitlines()[1:]
@@ -179,8 +185,15 @@ def stage_runtime(app: Path, runtime_root: Path, architecture: str) -> dict:
     resource = app / "Contents/Resources/runtime"
     resource.mkdir(parents=True, exist_ok=True)
     shutil.copytree(runtime / "licenses", resource / "licenses", dirs_exist_ok=True)
-    shutil.copy2(runtime / "runtime.json", resource / "runtime.json")
-    return manifest
+    provenance = {
+        **manifest,
+        "provenance_scope": "pre-sign-build",
+        "build_manifest_sha256": sha256(runtime / "runtime.json"),
+        "bundle_executable": "Contents/MacOS/whisper-cli",
+        "signed_executable_evidence": "release-result.json#/verification/helpers",
+    }
+    (resource / "runtime.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    return provenance
 
 
 def stage_icon(app: Path, product: str, attempt: Path) -> None:

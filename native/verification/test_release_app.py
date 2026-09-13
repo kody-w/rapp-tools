@@ -1,4 +1,6 @@
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 import plistlib
 import subprocess
@@ -95,6 +97,36 @@ class ReleaseAppTests(unittest.TestCase):
             (root / "Second.app").mkdir()
             with self.assertRaises(release.ReleaseError):
                 release.only_app(root)
+
+    def test_runtime_provenance_distinguishes_build_and_final_signed_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "RAPPVoice.app"
+            (app / "Contents/MacOS").mkdir(parents=True)
+            runtime = root / "runtime/arm64"
+            (runtime / "bin").mkdir(parents=True)
+            (runtime / "licenses").mkdir()
+            (runtime / "licenses/LICENSE").write_text("MIT fixture")
+            helper = runtime / "bin/whisper-cli"
+            helper.write_bytes(b"fixture build binary")
+            lock = json.loads((release.ROOT / "native/dependencies/whisper.json").read_text())
+            manifest = {**lock, "architecture": "arm64", "executable": "bin/whisper-cli",
+                        "executable_sha256": hashlib.sha256(helper.read_bytes()).hexdigest()}
+            path = runtime / "runtime.json"
+            path.write_text(json.dumps(manifest))
+            original = path.read_bytes()
+            with patch.object(release, "command", return_value="fixture:\n"):
+                result = release.stage_runtime(app, root / "runtime", "arm64")
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(result["provenance_scope"], "pre-sign-build")
+            self.assertEqual(result["build_manifest_sha256"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(result["bundle_executable"], "Contents/MacOS/whisper-cli")
+            self.assertEqual((app / result["bundle_executable"]).read_bytes(), helper.read_bytes())
+            self.assertEqual(json.loads((app / "Contents/Resources/runtime/runtime.json").read_text()), result)
+            manifest["version"] = "unreviewed"
+            path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(release.ReleaseError, "dependency lock"):
+                release.stage_runtime(app, root / "runtime", "arm64")
 
 
 if __name__ == "__main__":

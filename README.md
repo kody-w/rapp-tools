@@ -18,6 +18,48 @@ No Brainstem, Homebrew, Hammerspoon, Python or terminal is required for normal
 native use. First-run setup controls speech-model downloads and OS permissions;
 optional cloud processing is disabled until explicit consent.
 
+## Refresh an application and keep its source layout
+
+[RAPP Workspace Refresh](skills/rapp-workspace-refresh/SKILL.md) audits and
+modernizes an application repository through a reusable, portable skill. Its
+operator inventories source and nested archives without running application
+code, verifies the pinned current RAPP/1 reference, and prepares an additive
+root skill entry plus a checksum-pinned bootstrap. Existing root skill content
+and case-sensitive public URLs are preserved.
+
+```sh
+python3 rapp_workspace.py audit /path/to/application --allow-network
+python3 rapp_workspace.py prepare /path/to/application --apply
+python3 rapp_workspace.py bootstrap /path/to/application --apply \
+  --owner example --world-id local-personal --allow-network
+python3 rapp_workspace.py verify /path/to/application --allow-network
+```
+
+Use the actual owner/world rather than the example. Both `prepare` and
+`bootstrap` are **plan-only without `--apply`**. A clone does not execute code:
+after reviewing/trusting it, follow its root skill entry. First use needs
+explicit public network access or verified offline operator/bundles; warm
+bootstrap is offline-capable. Source stays in place; private state stays in
+`.rapp/workspace`, `.rapp/cache`, and `.rapp/reports`, excluded from Git. Existing
+workspace identities are reused or explicitly blocked for additive migration.
+No global Brainstem, service, signing key, or publication is created.
+
+The host performs the full semantic review, redesign and app-specific
+regressions; the deterministic scan is not a claim to understand every source
+file. Application readiness, workspace readiness, exact-integer artifact
+diagnostics, authenticated RAPP/1 acceptance, and production conformance are
+separate. Floating-point/full-JCS and missing authenticated owner evidence
+remain explicit blockers. A successful scan or bootstrap is **not a RAPP/1
+certificate**. `--allow-network` checks protected canonical freshness and never
+silently adopts a new specification.
+
+Tooling bundles under `workspace/artifacts/` are licensed, checksum-pinned
+reference sources, not protocol eggs or application installers. Their source
+commits and exact manifests are in `workspace/pins.json`. Reproduce the skill
+with `tools/build_refresh_skill.py --converter /reviewed/rapp_skills.py`; the
+converter verifies the skill and proves its code comes back unchanged, including
+the complete host workflow.
+
 The public [RAPP Store](https://kody-w.github.io/RAPP_Store/) is the app catalog.
 RAPP Tools is shared infrastructure, **not a fifth application**. Native release
 metadata lives in each catalog entry's `native_release`; the older top-level
@@ -91,13 +133,13 @@ that path is fully local. The twin exists to make the tools agent-drivable, and 
 inherits the host brainstem's model, whatever that is. Point the brainstem at a
 local model and the twin becomes local too.
 
-## Nothing is vendored
+## Application artifacts stay in their own repositories
 
 Catalogue entries point at each tool's own repository via
 `raw.githubusercontent.com`. No egg, agent or UI is copied here, so each tool's
 repo stays the source of truth and this catalogue cannot silently drift from it.
-A test asserts that no artifact has been copied in, and another asserts every
-catalogue URL still returns 200.
+The separate refresh skill and licensed protocol/workspace tooling bundles
+are build/operator capabilities, not copies of those four applications.
 
 What is centralised is **discovery and operation** — the part that was actually
 scattered across four repos.
@@ -175,6 +217,21 @@ rapptools hatch-all
 Needs a RAPP brainstem at `~/.brainstem`. Each tool's own engines (ffmpeg,
 whisper.cpp, the Vision shims) are that tool's dependency, listed in
 `rapptools list -v` and checked by its own `doctor`.
+
+Legacy hatching still verifies the retained catalog archive digest, but does
+not confer current RAPP/1 conformance. Missing digests refuse execution.
+`hatch --force` and `stop` now operate only on a process launched by this CLI
+whose PID/start identity still matches its private receipt. An existing
+launchd job or an unrelated port owner is left untouched; manage it through its
+actual owner first. Replacement stages and verifies archive contents, carries
+local twin state, and retains the prior full installation as a named backup.
+The host's own data directory remains governed by that host.
+
+Historical archives are immutable. `tools/rebuild-eggs.sh --check` verifies
+their original catalog hashes only; default rebuilding/overwriting is retired.
+Native successors do not regenerate old protocol forms. `tools/dryrun.sh`
+defaults to offline `--safe`; `--live-legacy` explicitly opts into the older
+network/private-fleet checks and is not an application compliance gate.
 
 ## Adding a tool
 
