@@ -23,6 +23,12 @@ PRODUCTS = {
     "RAPPVoice": ("io.rapp.voice", True),
     "RAPPCrispy": ("io.rapp.crispy", True),
 }
+PRODUCT_IDS = {
+    "RAPPShot": "rapp_shot",
+    "RAPPRewind": "rapp_rewind",
+    "RAPPVoice": "rapp_voice",
+    "RAPPCrispy": "rapp_crispy",
+}
 
 
 class ReleaseError(RuntimeError):
@@ -62,11 +68,17 @@ def only_app(directory: Path) -> Path:
     return apps[0]
 
 
-def signature_info(path: Path, expected_team: str) -> dict:
-    command(["codesign", "--verify", "--strict", str(path)])
+def portable_report(output: str, app: Path) -> str:
+    return output.replace(str(app.parent) + os.sep, "")
+
+
+def signature_info(path: Path, expected_team: str, report_root: Path | None = None) -> dict:
+    verified = command(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(path)])
     detail = command(["codesign", "-d", "--verbose=4", str(path)])
     lines = detail.splitlines()
     developer_id = any(line.startswith("Authority=Developer ID Application:") for line in lines)
+    authority = next((line.partition("=")[2] for line in lines
+                      if line.startswith("Authority=Developer ID Application:")), None)
     runtime = any("runtime" in line for line in lines if line.startswith("CodeDirectory"))
     team = next((line.partition("=")[2] for line in lines if line.startswith("TeamIdentifier=")), None)
     cdhash = next((line.partition("=")[2] for line in lines if line.startswith("CDHash=")), None)
@@ -87,6 +99,11 @@ def signature_info(path: Path, expected_team: str) -> dict:
         "code_directory_hash": cdhash,
         "secure_timestamp": timestamp,
         "get_task_allow": False,
+        "authority": authority,
+        "codesign_details": portable_report(detail, report_root or path),
+        "codesign_verify": {
+            "exit_code": 0, "output": portable_report(verified, report_root or path),
+        },
     }
 
 
@@ -107,7 +124,8 @@ def verify_app(app: Path, product: str, architecture: str, team: str) -> dict:
         raise ReleaseError("The native application must declare a full release version.")
     command(["codesign", "--verify", "--deep", "--strict", str(app)])
     signing = signature_info(app, team)
-    command(["xcrun", "stapler", "validate", str(app)])
+    signing["architectures"] = architectures
+    stapler = command(["xcrun", "stapler", "validate", str(app)])
     assessment = command(["spctl", "--assess", "--type", "execute", "--verbose=4", str(app)])
     if "source=Notarized Developer ID" not in assessment:
         raise ReleaseError("Gatekeeper did not recognize a notarized Developer ID application.")
@@ -121,7 +139,7 @@ def verify_app(app: Path, product: str, architecture: str, team: str) -> dict:
         helpers.append({
             "path": "Contents/MacOS/whisper-cli",
             "sha256": sha256(helper),
-            "signing": signature_info(helper, team),
+            "signing": signature_info(helper, team, report_root=app),
         })
     return {
         "bundle_id": bundle_id,
@@ -129,7 +147,12 @@ def verify_app(app: Path, product: str, architecture: str, team: str) -> dict:
         "minimum_macos": minimum,
         "architecture": architecture,
         "signing": signing,
-        "notarization": {"stapled": True, "gatekeeper_source": "Notarized Developer ID"},
+        "notarization": {
+            "method": "stapled-app", "app_path": app.name,
+            "bundle_id": bundle_id, "version": version, "minimum_os": minimum,
+        },
+        "gatekeeper": {"exit_code": 0, "output": portable_report(assessment, app)},
+        "stapler": {"exit_code": 0, "output": portable_report(stapler, app)},
         "helpers": helpers,
     }
 
@@ -209,7 +232,7 @@ def export_notarized(archive: Path, attempt: Path, team: str, wait_seconds: int)
 def build(args) -> dict:
     repo = args.repo.resolve()
     source = source_commit(repo)
-    support_source = source_commit(ROOT)
+    tooling_source = source_commit(ROOT)
     if not re.fullmatch(r"[A-Z0-9]{10}", args.team_id):
         raise ReleaseError("Provide the authorized Apple development team identifier.")
     native = repo / "native"
@@ -244,8 +267,9 @@ def build(args) -> dict:
     result = {
         "schema": "rapp-native-release-result/1.0",
         "product": args.product,
+        "rapplication_id": PRODUCT_IDS[args.product],
         "source_commit": source,
-        "support_source_commit": support_source,
+        "tooling_source_commit": tooling_source,
         "architecture": args.arch,
         "distribution_verified": False,
     }
@@ -254,7 +278,7 @@ def build(args) -> dict:
     else:
         app = export_notarized(archive, attempt, args.team_id, args.wait_seconds)
         verification = verify_app(app, args.product, args.arch, args.team_id)
-        filename = f"{args.product}-{verification['version']}-macos-{args.arch}.zip"
+        filename = f"{PRODUCT_IDS[args.product]}-{verification['version']}-{args.arch}.zip"
         artifact = attempt / filename
         command(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(artifact)])
         roundtrip = attempt / "download-roundtrip"
