@@ -6,3 +6,9 @@ __pycache__/
 # joined credential-shaped literal even though no source file does, and
 # the publishing gate reads it and says NO-GO — correctly.
 *.pyc
+
+.build/
+.swiftpm/
+native/.cache/
+native/dist/
+native/DerivedData/

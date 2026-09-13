@@ -2,6 +2,28 @@
 
 One catalogue and one command for the local-first RAPP tools.
 
+## Native macOS build support
+
+The root Swift package, `RAPPDesktopSupport`, is shared build-time source for
+the four independent macOS applications. It provides bundled-helper discovery,
+cancellable process execution, checksum-verified model installation, and local
+whisper.cpp transcription. It is not a fifth application or a required
+separate installation.
+
+Run its tests with `swift test -j 2`. Native dependencies are pinned under
+`native/dependencies/`. Speech models download only after the application
+asks the user; the approved model files have immutable source revisions,
+declared sizes, SHA-256 values, and license links. Captured audio is never
+uploaded by this package.
+
+Consumer apps resolve executables inside their signed application bundle.
+`RAPP_RUNTIME_BIN` is an explicit development/test override, not a consumer
+Homebrew or shell-PATH requirement. Native release availability must be
+established from verified published artifacts, not inferred from a passing
+Swift build or the historical cartridges below.
+
+## Historical CLI and twin integration
+
 Every tool here is a **hatchable rapplication**: it boots into its own brainstem
 on its own port carrying only its own agent, and is driven **headlessly** over the
 same `/chat` contract. Each ships a UI, but nothing requires one — an agent, a
