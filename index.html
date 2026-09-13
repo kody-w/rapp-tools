@@ -19,15 +19,28 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .banner{border-left:3px solid var(--good);padding:11px 15px;background:var(--panel);border-radius:0 9px 9px 0;margin-bottom:20px;font-size:13.5px;color:var(--dim)}
 .banner b{color:var(--ink)}
 .needs{font-size:12px;color:var(--dim);margin-top:6px}
+.downloads{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.downloads a{border:1px solid var(--line);border-radius:7px;padding:7px 10px;background:var(--bg)}
+details{margin-top:28px}summary{cursor:pointer;color:var(--dim);margin-bottom:12px}
+.error{color:#ef7474}
 </style></head><body>
 <header><h1>RAPP Tools</h1>
-<div class="sub">One catalogue for local-first RAPP tools. Every entry is a hatchable rapplication: it boots into its own brainstem on its own port and is driven headlessly over /chat, with a UI as an option rather than a requirement.</div></header>
+<div class="sub">Four independent native macOS applications. This repository provides their shared build and discovery infrastructure, not a fifth app.</div></header>
 <main>
-<div class="banner"><b>Headless first, UI optional.</b> Every tool below hatches into its own
-brainstem on its own port and is driven over the same <code>/chat</code> contract — so an agent,
-a script, or a person can use it. Each ships a UI, but nothing requires one.
-<br><br><b>Nothing is vendored here.</b> Entries point at each tool's own repository, so the tool's
-repo stays the source of truth.</div>
+<div class="banner"><b>Native apps, local processing.</b> Download for Apple silicon or Intel,
+unzip in Finder, and move the app to Applications. The released apps are Developer ID-signed,
+notarized and stapled. They require macOS 14 or newer, not Homebrew, Python, Hammerspoon,
+a terminal or a separate Brainstem.
+<br><br>Speech models download only after first-run setup. Capture and input permissions remain
+under your control; optional cloud processing requires explicit consent.
+<br><br><a href="https://kody-w.github.io/RAPP_Store/">Browse RAPP Store</a>.
+Each source repository holds its own versioned downloads and immutable verification evidence.</div>
+<div id="native-status" role="status">Loading native release metadata...</div>
+<div id="native-grid" class="grid"></div>
+<details><summary>Historical CLI/twin compatibility metadata</summary>
+<div class="banner">These commands and engine prerequisites describe the older CLI/twin path,
+not the native application installation. They are not proof of current RAPP/1 runtime acceptance.
+Native downloads above do not require this setup.</div>
 <div class="grid"><div class="card">
 <h2>RAPP Voice <span class="port">:7091</span></h2>
 <div class="one">Hold a key, speak, release — cleaned text appears at your cursor.</div>
@@ -41,7 +54,7 @@ rapptools call rapp_voice doctor</pre>
 </div>
 <div class="card">
 <h2>RAPP Crispy <span class="port">:7090</span></h2>
-<div class="one">Record, denoise and transcribe meetings entirely on-device; summarise through a hook you choose (the default one calls `claude -p`).</div>
+<div class="one">Record, process and transcribe meetings on-device; optional notes require an explicitly selected provider or hook.</div>
 <div class="k">Headless</div>
 <pre>rapptools hatch rapp_crispy
 rapptools call rapp_crispy doctor</pre>
@@ -71,5 +84,75 @@ rapptools call rapp_shot doctor</pre>
 <div class="k">Engines</div><div class="needs">Apple Vision OCR · CoreGraphics</div>
 <div class="k">Needs</div><div class="needs">Screen Recording permission; the shot CLI on PATH</div>
 <div class="k">Source</div><div class="needs"><a href="https://github.com/kody-w/rapp-shot">kody-w/rapp-shot</a></div>
-</div></div>
-</main></body></html>
+</div></div></details>
+</main>
+<script>
+function node(tag, text) {
+  const result = document.createElement(tag);
+  if (text !== undefined) result.textContent = text;
+  return result;
+}
+function checkedRelease(tool) {
+  const release = tool.native_release;
+  if (!/^rapp_(voice|crispy|rewind|shot)$/.test(tool.id) ||
+      tool.repo !== tool.id.replace("_", "-") ||
+      !release || !/^\d+\.\d+\.\d+$/.test(release.version) ||
+      release.minimum_macos !== "14.0" ||
+      !/^[a-f0-9]{40}$/.test(release.source_commit)) {
+    throw new Error("Invalid native release identity.");
+  }
+  const base = `https://github.com/kody-w/${tool.repo}/releases/`;
+  if (release.release_url !== base + `tag/v${release.version}` ||
+      release.store_url !== `https://kody-w.github.io/RAPP_Store/#rapp=${tool.id}` ||
+      typeof release.setup !== "string" || !release.setup.trim()) {
+    throw new Error("Invalid native release references.");
+  }
+  for (const arch of ["arm64", "x86_64"]) {
+    if (release.downloads?.[arch] !==
+        base + `download/v${release.version}/${tool.id}-${release.version}-${arch}.zip`) {
+      throw new Error("Invalid native download reference.");
+    }
+  }
+  return release;
+}
+async function showNativeReleases() {
+  const status = document.getElementById("native-status");
+  const grid = document.getElementById("native-grid");
+  try {
+    const response = await fetch("./catalog/catalog.json", {cache: "no-cache"});
+    if (!response.ok) throw new Error(`Catalog request failed (${response.status}).`);
+    const catalog = await response.json();
+    if (catalog.count !== 4 || !Array.isArray(catalog.tools) || catalog.tools.length !== 4 ||
+        new Set(catalog.tools.map(tool => tool.id)).size !== 4) {
+      throw new Error("The native catalog must contain exactly four distinct apps.");
+    }
+    const cards = catalog.tools.map(tool => {
+      const release = checkedRelease(tool);
+      const card = node("section");
+      card.className = "card";
+      card.append(node("h2", tool.name), node("p", `Native ${release.version} · macOS ${release.minimum_macos}+`));
+      card.append(node("p", tool.one), node("p", release.setup));
+      const downloads = node("div");
+      downloads.className = "downloads";
+      for (const [arch, label] of [["arm64", "Apple silicon"], ["x86_64", "Intel"]]) {
+        const link = node("a", `Download for ${label}`);
+        link.href = release.downloads[arch];
+        downloads.append(link);
+      }
+      const evidence = node("a", "Release notes and verification evidence");
+      evidence.href = release.release_url;
+      const store = node("a", "View in RAPP Store");
+      store.href = release.store_url;
+      card.append(downloads, evidence, node("br"), store);
+      return card;
+    });
+    grid.replaceChildren(...cards);
+    status.textContent = "";
+  } catch (error) {
+    status.className = "error";
+    status.textContent = `Native release metadata could not be loaded: ${error.message}`;
+    console.error("Native catalog failed", error);
+  }
+}
+showNativeReleases();
+</script></body></html>
