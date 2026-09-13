@@ -4,6 +4,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RT="$HERE/../rapptools"
 CAT="$HERE/../catalog/catalog.json"
+if [ "${1:-}" = "--safe" ]; then
+  exec python3 -m unittest discover -s "$HERE/../native/verification" -p 'test_native_catalog.py' -v
+fi
 pass=0; fail=0
 ok(){ printf '  \033[32mPASS\033[0m %s\n' "$*"; pass=$((pass+1)); }
 bad(){ printf '  \033[31mFAIL\033[0m %s\n' "$*"; fail=$((fail+1)); }
