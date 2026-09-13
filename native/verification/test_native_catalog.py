@@ -20,8 +20,8 @@ class NativeCatalogTests(unittest.TestCase):
         )
 
     def test_native_downloads_have_versioned_same_repository_urls(self):
-        versions = {"rapp_voice": "1.1.0", "rapp_rewind": "1.2.0",
-                    "rapp_shot": "1.3.0", "rapp_crispy": "1.5.0"}
+        versions = {"rapp_voice": "1.1.1", "rapp_rewind": "1.2.1",
+                    "rapp_shot": "1.3.1", "rapp_crispy": "1.5.1"}
         for tool in self.catalog["tools"]:
             native = tool["native_release"]
             version = versions[tool["id"]]
